@@ -10,3 +10,2530 @@
       <script src="script.js"></script>
   </body>
 </html>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot học tập THPT</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f5f7fa;
+            color: #333;
+            overflow: hidden;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #ffffff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            margin: 20px;
+            overflow: hidden;
+        }
+
+        .app-header {
+            background: linear-gradient(135deg, #3a7bd5, #00d2ff);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .app-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .app-header .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #subjectScreen {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #subjectScreen h2 {
+            color: #3a7bd5;
+            margin-bottom: 30px;
+            font-size: 2rem;
+        }
+
+        .subject-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            width: 80%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .subject-button {
+            background: linear-gradient(135deg, #3a7bd5, #00d2ff);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 25px 20px;
+            font-size: 1.3rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 180px;
+        }
+
+        .subject-button i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .subject-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(58, 123, 213, 0.4);
+        }
+
+        #chatbot-container {
+            display: none;
+            flex-direction: column;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .chat-area {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #khung-tro-chuyen {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tin-nhan {
+            margin-bottom: 15px;
+            padding: 12px 18px;
+            border-radius: 12px;
+            max-width: 80%;
+            position: relative;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            font-size: 1rem;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .tin-nhan-nguoi-dung {
+            background-color: #3a7bd5;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+            border-bottom-right-radius: 5px;
+        }
+
+        .tin-nhan-bot {
+            background-color: #ffffff;
+            color: #333;
+            margin-right: auto;
+            text-align: left;
+            border-bottom-left-radius: 5px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .message-time {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        #khu-vuc-nhap {
+            display: flex;
+            padding: 15px;
+            background-color: #ffffff;
+            border-top: 1px solid #e0e0e0;
+            align-items: center;
+        }
+
+        #o-nhap-tin-nhan-container {
+            position: relative;
+            flex-grow: 1;
+            min-height: 50px;
+        }
+
+        #o-nhap-tin-nhan {
+            width: 100%;
+            background: #f5f7fa;
+            color: #333;
+            caret-color: #333;
+            padding: 12px 50px 12px 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 25px;
+            outline: none;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            min-height: 50px;
+            resize: none;
+            overflow: hidden;
+        }
+
+        #o-nhap-tin-nhan:focus {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+        }
+
+        .back-button {
+            background-color: transparent;
+            border: none;
+            color: #3a7bd5;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            transition: background-color 0.3s ease;
+            margin-right: auto;
+        }
+
+        .back-button:hover {
+            background-color: #f0f4ff;
+        }
+
+        .loading-indicator {
+            display: none;
+            padding: 10px 15px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            margin-right: auto;
+            border: 1px solid #e0e0e0;
+            width: fit-content;
+        }
+
+        .loading-dots {
+            display: flex;
+            gap: 5px;
+        }
+
+        .loading-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #3a7bd5;
+            display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .loading-dots span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+
+        .loading-dots span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        #file-upload {
+            display: none;
+        }
+
+        .file-upload-button {
+            background-color: #f5f7fa;
+            color: #3a7bd5;
+            border: 1px solid #e0e0e0;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            margin-right: 10px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            transition: all 0.3s ease;
+        }
+
+        .file-upload-button:hover {
+            background-color: #e0e8ff;
+        }
+
+        .knowledge-box {
+            background-color: #f0f7ff;
+            border-left: 4px solid #3a7bd5;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .knowledge-box-title {
+            font-weight: bold;
+            color: #3a7bd5;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .exercise-suggestion {
+            background-color: #f5fff0;
+            border-left: 4px solid #4CAF50;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .exercise-suggestion-title {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .question-box {
+            background-color: #fff8f0;
+            border-left: 4px solid #FF9800;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .question-box-title {
+            font-weight: bold;
+            color: #FF9800;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .message-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 10px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .message-image:hover {
+            transform: scale(1.02);
+        }
+
+        .file-attachment {
+            display: flex;
+            align-items: center;
+            background-color: #f5f5f5;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 10px;
+            max-width: 100%;
+            word-break: break-all;
+        }
+
+        .file-attachment i {
+            margin-right: 8px;
+            color: #3a7bd5;
+        }
+
+        .formula {
+            background-color: #f5f5f5;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 5px 0;
+        }
+
+        .similar-exercise {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #6c757d;
+        }
+
+        .similar-exercise-title {
+            font-weight: bold;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        .problem-summary {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            border-left: 3px solid #3a7bd5;
+        }
+
+        .summary-title {
+            font-weight: bold;
+            color: #3a7bd5;
+            margin-bottom: 5px;
+        }
+
+
+        .progress-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            width: 250px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .progress-title {
+            font-weight: bold;
+            color: #3a7bd5;
+            font-size: 1.1rem;
+        }
+
+        .close-progress {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        .progress-item {
+            margin-bottom: 10px;
+        }
+
+        .progress-topic {
+            font-weight: 500;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .progress-bar-container {
+            height: 8px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3a7bd5, #00d2ff);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-stats {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .progress-toggle {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: linear-gradient(135deg, #3a7bd5, #00d2ff);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 10px rgba(58, 123, 213, 0.3);
+            z-index: 1000;
+        }
+
+
+        .reminder-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .reminder-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .reminder-title {
+            font-weight: bold;
+            color: #4CAF50;
+            font-size: 1.1rem;
+        }
+
+        .close-reminder {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        .reminder-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+        }
+
+        .reminder-topic {
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .reminder-exercise {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .reminder-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #4CAF50, #8BC34A);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 10px rgba(76, 175, 80, 0.3);
+            z-index: 1000;
+        }
+
+
+        .review-suggestion {
+            background-color: #fff3e0;
+            border-left: 4px solid #FF9800;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .review-suggestion-title {
+            font-weight: bold;
+            color: #FF9800;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                margin: 0;
+                border-radius: 0;
+            }
+
+            .app-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .subject-buttons {
+                grid-template-columns: 1fr;
+                width: 100%;
+            }
+
+            .subject-button {
+                padding: 20px;
+                height: 150px;
+                font-size: 1.1rem;
+            }
+
+            .subject-button i {
+                font-size: 2.5rem;
+            }
+
+            #khung-tro-chuyen {
+                padding: 15px;
+            }
+
+            .tin-nhan {
+                max-width: 90%;
+                padding: 10px 15px;
+                font-size: 0.95rem;
+            }
+
+            #khu-vuc-nhap {
+                padding: 10px;
+            }
+
+            #o-nhap-tin-nhan {
+                padding: 10px 45px 10px 15px;
+                min-height: 45px;
+                font-size: 0.95rem;
+            }
+
+            #nut-gui {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
+            }
+
+            .file-upload-button {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
+            }
+
+            .progress-container {
+                width: 90%;
+                left: 5%;
+                right: auto;
+            }
+
+            .reminder-container {
+                width: 90%;
+                left: 5%;
+                right: auto;
+            }
+        }
+        .test-container {
+    border: 2px solid #3a7bd5;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 20px;
+    background-color: #f8f9fa;
+}
+
+.test-container div:first-child {
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.2rem;
+    color: #3a7bd5;
+    margin-bottom: 13px;
+}
+
+.test-container div:nth-child(2) {
+    margin-bottom: 15px;
+    line-height: 1.6;
+}
+
+.test-container div:last-child {
+    font-style: italic;
+    color: #666;
+}
+
+.test-result {
+    border: 2px solid #4CAF50;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 20px;
+    background-color: #f8f9fa;
+}
+
+.test-result div:first-child {
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.2rem;
+    color: #4CAF50;
+    margin-bottom: 15px;
+}
+
+.test-result div:nth-child(2) {
+    margin-bottom: 15px;
+    line-height: 1.6;
+}
+
+.correct-answer {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.wrong-answer {
+    color: #F44336;
+    font-weight: bold;
+}
+
+.test-summary {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #e8f5e9;
+    border-radius: 8px;
+    font-weight: bold;
+}
+.test-result {
+    border: 2px solid #4CAF50;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px 0;
+    background: #f8f9fa;
+}
+
+.test-header {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #3a7bd5;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.correct-answer {
+    color: #4CAF50;
+    margin: 5px 0;
+}
+
+.wrong-answer {
+    color: #F44336;
+    margin: 5px 0;
+}
+
+.hint {
+    color: #FF9800;
+    font-style: italic;
+    margin-left: 20px;
+}
+
+.test-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+}
+
+.test-history-table th {
+    background-color: #3a7bd5;
+    color: white;
+    padding: 8px;
+    text-align: left;
+}
+
+.test-history-table td {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+.test-history-table tr:hover {
+    background-color: #f5f5f5;
+}
+
+.test-details {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.test-details-header {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #3a7bd5;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #3a7bd5;
+    padding-bottom: 5px;
+}
+
+.test-details-section {
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #fff;
+    border-radius: 5px;
+    border-left: 3px solid #3a7bd5;
+}
+.test-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 0.9em;
+}
+
+.test-history-table th {
+    background-color: #3a7bd5;
+    color: white;
+    padding: 8px;
+    text-align: left;
+}
+
+.test-history-table td {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+.test-history-table tr:hover {
+    background-color: #f5f5f5;
+    cursor: pointer;
+}
+
+.correct-answer {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.wrong-answer {
+    color: #F44336;
+    font-weight: bold;
+}
+    </style>
+</head>
+<body>
+    <div class="main-container">
+      
+        <div class="app-header">
+            <div class="logo">
+                <i class="fas fa-graduation-cap"></i>
+                <h2>TriGuide: Gia sư AI hỗ trợ ôn tập các môn học Tự nhiên</h2>
+            </div>
+        </div>
+
+
+        <div id="subjectScreen">
+            <h2>Chọn môn học</h2>
+            <div class="subject-buttons">
+                <button class="subject-button" data-subject="toan-hoc">
+                    <i class="fas fa-square-root-alt"></i>
+                    Toán Học
+                </button>
+                <button class="subject-button" data-subject="vat-ly">
+                    <i class="fas fa-atom"></i>
+                    Vật Lý
+                </button>
+                <button class="subject-button" data-subject="hoa-hoc">
+                    <i class="fas fa-flask"></i>
+                    Hóa Học
+                </button>
+            </div>
+        </div>
+
+        <div id="chatbot-container">
+            <button class="back-button" id="backButton">
+                <i class="fas fa-arrow-left"></i> Quay lại môn học
+            </button>
+            <div class="chat-area">
+                <div id="khung-tro-chuyen"></div>
+                <div class="loading-indicator" id="loadingIndicator">
+                    <div class="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+                <div id="khu-vuc-nhap">
+                    <label for="file-upload" class="file-upload-button">
+                        <i class="fas fa-paperclip"></i>
+                    </label>
+                    <input type="file" id="file-upload" accept="image/*,.pdf,.doc,.docx,.txt">
+                    <div id="o-nhap-tin-nhan-container">
+                        <textarea id="o-nhap-tin-nhan" placeholder="Nhập câu hỏi của bạn hoặc tải lên file đề bài..." rows="1"></textarea>
+                        <button id="nut-gui">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                        <button id="historyButton" style="background-color: transparent; border: none; color: #3a7bd5; font-size: 1.2rem; margin-right: 10px; cursor: pointer;" title="Xem lịch sử bài kiểm tra">
+        <i class="fas fa-history"></i>
+    </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="progress-toggle" id="progressToggle">
+        <i class="fas fa-chart-line"></i>
+    </button>
+
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-header">
+            <div class="progress-title">Tiến độ học tập</div>
+            <button class="close-progress" id="closeProgress">&times;</button>
+        </div>
+        <div id="progressContent">
+  
+        </div>
+    </div>
+
+
+    <button class="reminder-toggle" id="reminderToggle">
+        <i class="fas fa-bell"></i>
+    </button>
+
+
+    <div class="reminder-container" id="reminderContainer">
+        <div class="reminder-header">
+            <div class="reminder-title">Gợi ý luyện tập tuần này</div>
+            <button class="close-reminder" id="closeReminder">&times;</button>
+        </div>
+        <div id="reminderContent">
+        
+        </div>
+    </div>
+
+  
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "@google/generative-ai": "https://esm.run/@google/generative-ai"
+            }
+        }
+    </script>
+   <script type="module">
+    import { GoogleGenerativeAI } from "@google/generative-ai";
+
+ 
+    const firebaseConfig = {
+        apiKey: "AIzaSyCyhGASygL5BVBB-0pJJNwoyTZ61pAzP7c",
+        authDomain: "tieuhoc-a7f57.firebaseapp.com",
+        projectId: "tieuhoc-a7f57",
+        storageBucket: "tieuhoc-a7f57.appspot.com",
+        messagingSenderId: "736631398515",
+        appId: "1:736631398515:web:a41bbabeeb98c3df42ca06"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+
+    const KHOA_API = "AIzaSyA6y8nT_KlSNNWCEbDhq4cnyuE3zdtzsd4"; 
+    const moHinhAI = new GoogleGenerativeAI(KHOA_API);
+    const moHinh = moHinhAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" });
+
+
+    const subjectScreen = document.getElementById('subjectScreen');
+    const chatbotContainer = document.getElementById('chatbot-container');
+    const khungTroChuyen = document.getElementById('khung-tro-chuyen');
+    const oNhapTinNhan = document.getElementById('o-nhap-tin-nhan');
+    const nutGui = document.getElementById('nut-gui');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const subjectButtons = document.querySelectorAll('.subject-button');
+    const backButton = document.getElementById('backButton');
+    const fileUpload = document.getElementById('file-upload');
+    const progressToggle = document.getElementById('progressToggle');
+    const progressContainer = document.getElementById('progressContainer');
+    const closeProgress = document.getElementById('closeProgress');
+    const progressContent = document.getElementById('progressContent');
+    const reminderToggle = document.getElementById('reminderToggle');
+    const reminderContainer = document.getElementById('reminderContainer');
+    const closeReminder = document.getElementById('closeReminder');
+    const reminderContent = document.getElementById('reminderContent');
+
+  
+    let currentSubject = '';
+    let chatHistory = [];
+    let uploadedFile = null;
+    let currentProblem = null;
+    let userProgress = {}; 
+    let weaknessAreas = {};
+    let lastReminderDate = null; 
+
+let currentTest = null;
+let isWaitingForTestAnswers = false;
+  
+    let testHistory = {}; 
+    const generalExcludeKeywords = [
+        "đại học", "cao học", "nghiên cứu", "phân tích chuyên sâu", "triết học",
+        "kinh tế vĩ mô", "chính trị quốc tế", "tôn giáo", "đức tin"
+    ];
+    
+ 
+    const homeworkRequestPhrases = /(cho (tôi|em) bài tập|xin bài tập|gợi ý bài tập|bài tập về)/;
+    
+ 
+    const solutionRequestPhrases = /(giải bài|giải giúp|đáp án|kết quả|hướng dẫn giải|bài giải|làm bài|giải thích|cách làm)/;
+function drawTestHistoryChart() {
+    if (!currentSubject || !testHistory[currentSubject] || testHistory[currentSubject].length === 0) {
+        console.log("No data to display chart for subject:", currentSubject);
+        return;
+    }
+
+    let canvas = document.getElementById('testHistoryChart');
+    if (!canvas) {
+        const chartContainer = document.querySelector('#khung-tro-chuyen .knowledge-box');
+        if (chartContainer) {
+            canvas = document.createElement('canvas');
+            canvas.id = 'testHistoryChart';
+            canvas.style.width = '100%';
+            canvas.style.height = '250px';
+            canvas.style.maxHeight = '250px';
+            canvas.style.minHeight = '250px';
+            chartContainer.appendChild(canvas);
+        } else {
+            console.log("No chart container found");
+            return;
+        }
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    if (window.testHistoryChartInstance) {
+        window.testHistoryChartInstance.destroy();
+    }
+
+    const history = testHistory[currentSubject];
+    
+    const labels = history.map((test, index) => `Lần ${index + 1}`);
+    const scores = history.map(test => Math.min(Math.max(parseFloat(test.score) || 0, 0), 10));
+    const dates = history.map(test => new Date(test.date).toLocaleDateString());
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(58, 123, 213, 0.8)');
+    gradient.addColorStop(1, 'rgba(0, 210, 255, 0.2)');
+
+    window.testHistoryChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Điểm số',
+                data: scores,
+                backgroundColor: gradient,
+                borderColor: 'rgba(58, 123, 213, 1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointBackgroundColor: 'white',
+                pointBorderColor: 'rgba(58, 123, 213, 1)',
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            scales: {
+                y: {
+                    min: 0,
+                    max: 10,
+                    ticks: {
+                        stepSize: 1,
+                        callback: function(value) {
+                            return Number.isInteger(value) ? value : null;
+                        },
+                        maxTicksLimit: 11
+                    },
+                    title: {
+                        display: true,
+                        text: 'Điểm số'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Lần kiểm tra'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Điểm: ${context.raw}/10`;
+                        },
+                        afterLabel: function(context) {
+                            return `Ngày: ${dates[context.dataIndex]}`;
+                        }
+                    }
+                },
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: 'BIỂU ĐỒ TIẾN BỘ',
+                    font: {
+                        size: 16
+                    }
+                }
+            }
+        }
+    });
+}
+
+function generateChartComment() {
+    if (!currentSubject || !testHistory[currentSubject] || testHistory[currentSubject].length < 2) return;
+    
+    const history = testHistory[currentSubject];
+    const lastScore = history[history.length - 1].score;
+    const prevScore = history[history.length - 2].score;
+    const highestScore = Math.max(...history.map(test => test.score));
+    const averageScore = history.reduce((sum, test) => sum + test.score, 0) / history.length;
+    
+    let comment = "";
+    
+    if (lastScore > prevScore) {
+        comment = `Xuất sắc! Bạn đã cải thiện được ${(lastScore - prevScore).toFixed(1)} điểm so với lần trước. `;
+        if (lastScore === highestScore) {
+            comment += `Đây cũng là điểm số cao nhất của bạn!`;
+        }
+    } else if (lastScore === prevScore) {
+        comment = `Bạn giữ vững phong độ với ${lastScore.toFixed(1)} điểm. `;
+    } else {
+        comment = `Lần này bạn làm kém hơn ${(prevScore - lastScore).toFixed(1)} điểm so với lần trước. `;
+    }
+    
+    comment += `Điểm trung bình của bạn là ${averageScore.toFixed(1)}/10.`;
+    
+    const commentElement = document.getElementById('testChartComment');
+    if (commentElement) {
+        commentElement.textContent = comment;
+    }
+}
+
+function showTestDetails(subject, index) {
+    const test = testHistory[subject][index];
+    if (!test) return;
+    
+    const date = new Date(test.date).toLocaleString();
+    const scoreClass = test.score >= 8 ? "correct-answer" : test.score >= 5 ? "" : "wrong-answer";
+    
+    let detailsHTML = `<div class="test-result">
+        <div class="test-header">CHI TIẾT BÀI KIỂM TRA</div>
+        <div style="margin-bottom: 10px;">
+            <strong>Ngày thi:</strong> ${date}<br>
+            <strong>Chủ đề:</strong> ${test.topic}<br>
+            <strong>Điểm số:</strong> <span class="${scoreClass}">${test.score}/10</span>
+        </div>
+        <div class="question-box">
+            <div class="question-box-title"><i class="fas fa-clipboard-list"></i> Nhận xét</div>
+            ${test.comment.replace(/\n/g, '<br>')}
+        </div>`;
+    
+    detailsHTML += `<div style="text-align: center; margin-top: 15px;">
+        <button onclick="this.parentElement.parentElement.style.display='none'" 
+                style="padding: 5px 15px; background: #3a7bd5; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Đóng
+        </button>
+    </div>`;
+    
+    detailsHTML += `</div>`;
+    
+    themTinNhanVaoGiaoDien("bot", detailsHTML);
+    addToChatHistory("bot", detailsHTML, subject);
+}
+
+function showTestHistory() {
+    if (!currentSubject) return;
+    
+    const history = testHistory[currentSubject] || [];
+    if (history.length === 0) {
+        const message = "Bạn chưa có bài kiểm tra nào trong lịch sử.";
+        themTinNhanVaoGiaoDien("bot", message);
+        addToChatHistory("bot", message, currentSubject);
+        return;
+    }
+    
+    let historyHTML = `<div class="knowledge-box">
+        <div class="knowledge-box-title"><i class="fas fa-history"></i> Lịch sử bài kiểm tra</div>
+        <div style="overflow-x: auto;">
+            <table class="test-history-table">
+                <thead>
+                    <tr>
+                        <th>Ngày</th>
+                        <th>Chủ đề</th>
+                        <th style="text-align: center;">Điểm</th>
+                        <th>Tiến bộ</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+    
+    history.slice().reverse().forEach((test, index) => {
+        const date = new Date(test.date).toLocaleDateString();
+        const scoreClass = test.score >= 8 ? "correct-answer" : test.score >= 5 ? "" : "wrong-answer";
+        
+        let improvementBadge = '';
+        if (index > 0) {
+            const prevScore = history[history.length - index].score;
+            const improvement = ((test.score - prevScore) / prevScore * 100).toFixed(1);
+            
+            if (improvement > 0) {
+                improvementBadge = `<span style="color: #10b981; font-weight: bold;">↑ ${improvement}%</span>`;
+            } else if (improvement < 0) {
+                improvementBadge = `<span style="color: #ef4444; font-weight: bold;">↓ ${Math.abs(improvement)}%</span>`;
+            } else {
+                improvementBadge = `<span style="color: #6b7280;">→ 0%</span>`;
+            }
+        }
+        
+        historyHTML += `
+            <tr onclick="showTestDetails('${currentSubject}', ${history.length - 1 - index})">
+                <td>${date}</td>
+                <td>${test.topic}</td>
+                <td style="text-align: center;" class="${scoreClass}">${test.score}/10</td>
+                <td>${improvementBadge}</td>
+            </tr>`;
+    });
+    
+    historyHTML += `</tbody></table></div>`;
+    
+    historyHTML += `<div style="margin-top: 20px;">
+        <canvas id="testHistoryChart" style="width: 100%; height: 250px;"></canvas>
+        <div id="testChartComment" style="margin-top: 10px; padding: 10px; background-color: #f5f5f5; border-radius: 5px;"></div>
+    </div>`;
+    
+    themTinNhanVaoGiaoDien("bot", historyHTML);
+    addToChatHistory("bot", historyHTML, currentSubject);
+    
+    setTimeout(() => {
+        drawTestHistoryChart();
+        generateChartComment();
+    }, 500);
+}
+
+function loadTestHistory() {
+    const savedHistory = localStorage.getItem('testHistory');
+    if (savedHistory) {
+        testHistory = JSON.parse(savedHistory);
+        ['toan-hoc', 'vat-ly', 'hoa-hoc'].forEach(subject => {
+            if (testHistory[subject] && testHistory[subject].length > 10) {
+                testHistory[subject] = testHistory[subject].slice(-10);
+            }
+        });
+    } else {
+        testHistory = {
+            'toan-hoc': [],
+            'vat-ly': [],
+            'hoa-hoc': []
+        };
+    }
+    saveTestHistory();
+}
+
+function saveTestHistory() {
+    localStorage.setItem('testHistory', JSON.stringify(testHistory));
+}
+
+loadTestHistory();
+
+function backToSubjects() {
+    currentSubject = '';
+    subjectScreen.style.display = 'flex';
+    chatbotContainer.style.display = 'none';
+}
+
+function initApp() {
+    subjectButtons.forEach(button => {
+        button.addEventListener('click', () => selectSubject(button.dataset.subject));
+    });
+
+    nutGui.addEventListener('click', guiTinNhan);
+    
+    backButton.addEventListener('click', backToSubjects);
+    
+    oNhapTinNhan.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            guiTinNhan();
+        }
+    });
+
+    oNhapTinNhan.addEventListener('input', adjustTextareaHeight);
+
+    fileUpload.addEventListener('change', handleFileUpload);
+
+    progressToggle.addEventListener('click', toggleProgressPanel);
+    closeProgress.addEventListener('click', toggleProgressPanel);
+
+    reminderToggle.addEventListener('click', toggleReminderPanel);
+    closeReminder.addEventListener('click', toggleReminderPanel);
+
+    loadChatHistory();
+    loadUserProgress();
+    loadWeaknessAreas();
+    loadLastReminderDate();
+
+    checkWeeklyReminders();
+
+    document.getElementById('historyButton').addEventListener('click', showTestHistory);
+}
+
+function toggleProgressPanel() {
+    if (progressContainer.style.display === 'block') {
+        progressContainer.style.display = 'none';
+    } else {
+        progressContainer.style.display = 'block';
+        updateProgressDisplay();
+    }
+}
+
+function toggleReminderPanel() {
+    if (reminderContainer.style.display === 'block') {
+        reminderContainer.style.display = 'none';
+    } else {
+        reminderContainer.style.display = 'block';
+        updateReminderDisplay();
+    }
+}
+
+function updateProgressDisplay() {
+    if (!currentSubject) {
+        progressContent.innerHTML = '<div class="progress-item">Vui lòng chọn môn học để xem tiến độ</div>';
+        return;
+    }
+
+    const subjectName = 
+        currentSubject === 'toan-hoc' ? 'Toán Học' : 
+        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    const totalExercises = userProgress[currentSubject]?.totalExercises || 0;
+    const completedExercises = userProgress[currentSubject]?.completedExercises || 0;
+    const completionRate = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
+
+    let html = `<div class="progress-item">
+        <div class="progress-topic">Môn học: <span>${subjectName}</span></div>
+        <div class="progress-stats">Tổng số bài đã làm: ${totalExercises}</div>
+        <div class="progress-stats">Tổng số bài đã hoàn thành: ${completedExercises}</div>
+        <div class="progress-topic">
+            <span>Tiến độ hoàn thành</span>
+            <span>${completionRate}%</span>
+        </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar" style="width: ${completionRate}%"></div>
+        </div>
+        <div class="progress-stats">${completedExercises}/${totalExercises} bài đã hoàn thành</div>
+    </div>`;
+
+    progressContent.innerHTML = html;
+}
+
+function updateReminderDisplay() {
+    if (!currentSubject) {
+        reminderContent.innerHTML = '<div class="reminder-item">Vui lòng chọn môn học để xem gợi ý</div>';
+        return;
+    }
+
+    const subjectName = 
+        currentSubject === 'toan-hoc' ? 'Toán Học' : 
+        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    let html = `<div class="reminder-item">
+        <div class="reminder-topic">Môn học: ${subjectName}</div>
+    </div>`;
+
+    if (weaknessAreas[currentSubject]) {
+        Object.entries(weaknessAreas[currentSubject]).forEach(([topic, exercises]) => {
+            html += `
+                <div class="reminder-item">
+                    <div class="reminder-topic">Ôn tập: ${topic}</div>
+                    <div class="reminder-exercise">${exercises.join('<br>')}</div>
+                </div>
+            `;
+        });
+    }
+
+    reminderContent.innerHTML = html;
+}
+
+function checkWeeklyReminders() {
+    const now = new Date();
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
+    
+    if (!lastReminderDate || (now - new Date(lastReminderDate)) >= oneWeek) {
+        generateWeeklyReminders();
+        lastReminderDate = now.toISOString();
+        saveLastReminderDate();
+        
+        setTimeout(() => {
+            const reminderMessage = `Bạn ơi, mình đã phân tích điểm yếu và gợi ý bài tập cho tuần này. Nhấn vào biểu tượng chuông để xem nhé!`;
+            
+            themTinNhanVaoGiaoDien("bot", reminderMessage);
+            addToChatHistory("bot", reminderMessage, currentSubject);
+        }, 3000);
+    }
+}
+
+async function generateWeeklyReminders() {
+    if (!currentSubject) return;
+
+    const subjectName = 
+        currentSubject === 'toan-hoc' ? 'Toán Học' : 
+        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    const prompt = `Bạn là một học sinh giỏi ${subjectName} THPT. Dựa trên các bài tập mà bạn học đã gặp khó khăn, hãy:
+    
+1. Xác định 3 chủ đề mà bạn học cần ôn tập nhiều nhất
+2. Gợi ý 2 bài tập cho mỗi chủ đề để luyện tập trong tuần này
+
+Dữ liệu bài tập đã làm:
+${JSON.stringify(userProgress[currentSubject]?.topics || {})}
+
+Điểm yếu đã phát hiện:
+${JSON.stringify(weaknessAreas[currentSubject] || {})}
+
+Yêu cầu:
+- Chỉ đưa ra đề bài, không giải
+- Bài tập phù hợp với trình độ THPT
+- Sắp xếp theo mức độ từ dễ đến khó
+- Xưng hô: mình (cho bot) và bạn (cho người dùng)
+
+Kết quả phân tích:
+1. Chủ đề 1: 
+- Bài tập 1: 
+- Bài tập 2: 
+
+2. Chủ đề 2: 
+- Bài tập 1: 
+- Bài tập 2: 
+
+3. Chủ đề 3: 
+- Bài tập 1: 
+- Bài tập 2: `;
+
+    try {
+        const ketQua = await moHinh.generateContent(prompt);
+        const phanHoi = await ketQua.response;
+        const reminders = phanHoi.text();
+        
+        updateWeaknessFromReminders(reminders);
+        
+        saveWeaknessAreas();
+        updateReminderDisplay();
+        
+    } catch (error) {
+        console.error("Lỗi khi tạo gợi ý tuần:", error);
+    }
+}
+
+function updateWeaknessFromReminders(remindersText) {
+    if (!currentSubject) return;
+    
+    if (!weaknessAreas[currentSubject]) {
+        weaknessAreas[currentSubject] = {};
+    }
+    
+    const lines = remindersText.split('\n');
+    let currentTopic = '';
+    
+    for (const line of lines) {
+        if (line.startsWith('Chủ đề')) {
+            const topicMatch = line.match(/Chủ đề \d+: (.+)/);
+            if (topicMatch && topicMatch[1]) {
+                currentTopic = topicMatch[1].trim();
+                weaknessAreas[currentSubject][currentTopic] = [];
+            }
+        } else if (line.startsWith('- Bài tập') && currentTopic) {
+            const exercise = line.replace(/^- Bài tập \d+: /, '').trim();
+            if (exercise) {
+                weaknessAreas[currentSubject][currentTopic].push(exercise);
+            }
+        }
+    }
+}
+
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    uploadedFile = file;
+    
+    const fileName = file.name.length > 20 ? file.name.substring(0, 17) + '...' : file.name;
+    const fileType = file.type.split('/')[0];
+    
+    if (fileType === 'image') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const messageTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const messageContent = `Đã tải lên hình ảnh: ${fileName}<div class="message-time">${messageTime}</div>`;
+            
+            const divTinNhan = document.createElement('div');
+            divTinNhan.classList.add('tin-nhan', 'tin-nhan-nguoi-dung');
+            divTinNhan.innerHTML = messageContent;
+            
+            const imgElement = document.createElement('img');
+            imgElement.src = e.target.result;
+            imgElement.className = 'message-image';
+            divTinNhan.appendChild(imgElement);
+            
+            khungTroChuyen.appendChild(divTinNhan);
+            khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
+            
+            addToChatHistory("nguoi-dung", `Đã tải lên hình ảnh: ${fileName}`, currentSubject);
+        };
+        reader.readAsDataURL(file);
+    } else {
+        const messageTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const messageContent = `Đã tải lên file: ${fileName}<div class="message-time">${messageTime}</div>`;
+        
+        const divTinNhan = document.createElement('div');
+        divTinNhan.classList.add('tin-nhan', 'tin-nhan-nguoi-dung');
+        divTinNhan.innerHTML = messageContent;
+        
+        const fileElement = document.createElement('div');
+        fileElement.className = 'file-attachment';
+        fileElement.innerHTML = `<i class="fas fa-file"></i> ${fileName}`;
+        divTinNhan.appendChild(fileElement);
+        
+        khungTroChuyen.appendChild(divTinNhan);
+        khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
+        
+        addToChatHistory("nguoi-dung", `Đã tải lên file: ${fileName}`, currentSubject);
+    }
+    
+    event.target.value = '';
+}
+
+function adjustTextareaHeight() {
+    oNhapTinNhan.style.height = 'auto';
+    oNhapTinNhan.style.height = (oNhapTinNhan.scrollHeight) + 'px';
+}
+
+function scrollToBottom() {
+    khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
+}
+
+function themTinNhanVaoGiaoDien(nguoiGui, vanBan) {
+    const divTinNhan = document.createElement('div');
+    divTinNhan.classList.add('tin-nhan', `tin-nhan-${nguoiGui}`);
+
+    const lastMessage = chatHistory.slice(-1)[0];
+    const messageTime = lastMessage && lastMessage.timestamp 
+        ? new Date(lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    divTinNhan.innerHTML = vanBan + `<div class="message-time">${messageTime}</div>`;
+    khungTroChuyen.appendChild(divTinNhan);
+    scrollToBottom();
+}
+
+function addToChatHistory(nguoiGui, vanBan, subject) {
+    const timestamp = new Date().toISOString();
+    chatHistory.push({
+        sender: nguoiGui,
+        message: vanBan,
+        subject: subject,
+        timestamp: timestamp
+    });
+    
+    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+}
+
+function loadChatHistory() {
+    const savedHistory = localStorage.getItem('chatHistory');
+    if (savedHistory) {
+        chatHistory = JSON.parse(savedHistory);
+    }
+}
+
+function loadUserProgress() {
+    const savedProgress = localStorage.getItem('userProgress');
+    if (savedProgress) {
+        userProgress = JSON.parse(savedProgress);
+    } else {
+        userProgress = {
+            'toan-hoc': { 
+                totalExercises: 0, 
+                completedExercises: 0,
+                topics: {} 
+            },
+            'vat-ly': { 
+                totalExercises: 0, 
+                completedExercises: 0,
+                topics: {} 
+            },
+            'hoa-hoc': { 
+                totalExercises: 0,
+                completedExercises: 0,
+                topics: {} 
+            }
+        };
+    }
+}
+
+function loadWeaknessAreas() {
+    const savedWeakness = localStorage.getItem('weaknessAreas');
+    if (savedWeakness) {
+        weaknessAreas = JSON.parse(savedWeakness);
+    } else {
+        weaknessAreas = {
+            'toan-hoc': {},
+            'vat-ly': {},
+            'hoa-hoc': {}
+        };
+    }
+}
+
+function loadLastReminderDate() {
+    const savedDate = localStorage.getItem('lastReminderDate');
+    if (savedDate) {
+        lastReminderDate = savedDate;
+    }
+}
+
+function saveUserProgress() {
+    localStorage.setItem('userProgress', JSON.stringify(userProgress));
+}
+
+function saveWeaknessAreas() {
+    localStorage.setItem('weaknessAreas', JSON.stringify(weaknessAreas));
+}
+
+function saveLastReminderDate() {
+    localStorage.setItem('lastReminderDate', lastReminderDate);
+}
+
+function updateUserProgress(topic, isCompleted) {
+    if (!currentSubject) return;
+    
+    if (!userProgress[currentSubject]) {
+        userProgress[currentSubject] = { 
+            totalExercises: 0, 
+            completedExercises: 0,
+            topics: {},
+            lastProblem: null
+        };
+    }
+    
+    if (!userProgress[currentSubject].topics[topic]) {
+        userProgress[currentSubject].topics[topic] = {
+            total: 0,
+            completed: 0,
+            mistakes: 0
+        };
+    }
+    
+    const topicStats = userProgress[currentSubject].topics[topic];
+    
+    if (isCompleted === undefined) {
+        if (userProgress[currentSubject].lastProblem !== currentProblem.question) {
+            userProgress[currentSubject].totalExercises += 1;
+            topicStats.total += 1;
+            userProgress[currentSubject].lastProblem = currentProblem.question;
+        }
+    }
+    else if (isCompleted === true) {
+        if (!currentProblem.countedAsCompleted) {
+            userProgress[currentSubject].completedExercises += 1;
+            topicStats.completed += 1;
+            currentProblem.countedAsCompleted = true;
+        }
+    }
+    else if (isCompleted === false) {
+        topicStats.mistakes += 1;
+        
+        const mistakeRate = topicStats.mistakes / topicStats.total;
+        if (mistakeRate > 0.5 && !weaknessAreas[currentSubject][topic]) {
+            weaknessAreas[currentSubject][topic] = [];
+            saveWeaknessAreas();
+        }
+    }
+    
+    saveUserProgress();
+    updateProgressDisplay();
+}
+
+function loadSubjectChatHistory(subject) {
+    khungTroChuyen.innerHTML = '';
+    
+    const subjectMessages = chatHistory.filter(msg => msg.subject === subject);
+    
+    subjectMessages.forEach(msg => {
+        const divTinNhan = document.createElement('div');
+        divTinNhan.classList.add('tin-nhan', `tin-nhan-${msg.sender}`);
+        
+        const messageTime = msg.timestamp 
+            ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        divTinNhan.innerHTML = msg.message + `<div class="message-time">${messageTime}</div>`;
+        khungTroChuyen.appendChild(divTinNhan);
+    });
+    
+    setTimeout(scrollToBottom, 100);
+
+    if (subjectMessages.length === 0) {
+        const subjectName = 
+            subject === 'toan-hoc' ? 'Toán Học' : 
+            subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        const welcomeMessage = `TriGuide chào bạn!!! Mình là trợ lý học tập môn ${subjectName}. Mình có thể giúp bạn học tập bằng cách gợi mở tư duy. Bạn có câu hỏi gì về môn học này không?`;
+        
+        themTinNhanVaoGiaoDien("bot", welcomeMessage);
+        addToChatHistory("bot", welcomeMessage, subject);
+    }
+}
+
+function generateAnalysisPrompt(question, subject, history) {
+    const subjectName = 
+        subject === 'toan-hoc' ? 'Toán Học' : 
+        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    let context = "Lịch sử trò chuyện gần đây:\n";
+    if (history && history.length > 0) {
+        context += history.slice(-3).map(msg => 
+            `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
+        ).join('\n');
+    } else {
+        context += "Chưa có lịch sử trò chuyện";
+    }
+    
+    return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy phân tích câu hỏi sau theo yêu cầu:
+
+QUY TẮC BẮT BUỘC:
+1. KHÔNG sử dụng ký tự * trong bất kỳ trường hợp nào
+2. KHÔNG được đưa ra đáp án cuối cùng
+3. KHÔNG tự động giải bài hoàn chỉnh
+4. Chỉ ở vai trò gợi mở tư duy
+5. Xưng hô: mình (cho bot) và bạn (cho người dùng)
+6. PHẢI tuân thủ chính xác cấu trúc trả lời dưới đây
+7. Nếu không tuân thủ cấu trúc, câu trả lời sẽ bị coi là không hợp lệ
+
+1. Tóm tắt đề bài: (BẮT BUỘC dùng ký hiệu, ví dụ: r=0.5m, S=?cm², n=0.1mol)
+2. Chủ đề: (Chỉ ghi tên chủ đề chính)
+3. Kiến thức liên quan:
+- Khái niệm: (Dùng từ ngữ đơn giản, dễ hiểu)
+- Công thức: (Viết đơn giản bằng chữ, ví dụ: "vận tốc bằng quãng đường chia thời gian")
+4. Câu hỏi định hướng: (3-5 câu hỏi giúp bạn tự nghĩ)
+5. Bài tập tương tự: (2 bài, chỉ đề bài)
+
+YÊU CẦU:
+- Tuyệt đối không giải bài
+- Không đưa ra đáp án cuối cùng
+- Chỉ gợi mở hướng giải quyết
+- Dùng từ ngữ đơn giản, gần gũi
+- Công thức viết bằng chữ, không dùng ký hiệu toán học
+- KHÔNG dùng dấu * để thay thế cho phép nhân
+- PHẢI điền đầy đủ các mục 1-5 ở trên
+
+Lịch sử chat:
+${context}
+
+Câu hỏi hiện tại: ${question}
+
+Phân tích:
+1. Tóm tắt đề bài: 
+2. Chủ đề: 
+3. Kiến thức liên quan:
+- Khái niệm: 
+- Công thức: 
+4. Câu hỏi định hướng:
+- 
+- 
+- 
+5. Bài tập tương tự:
+- 
+- `;
+}
+
+function generateSolutionGuidancePrompt(question, subject, history, analysis) {
+    const subjectName = 
+        subject === 'toan-hoc' ? 'Toán Học' : 
+        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    let context = "Lịch sử trò chuyện gần đây:\n";
+    if (history && history.length > 0) {
+        context += history.slice(-3).map(msg => 
+            `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
+        ).join('\n');
+    } else {
+        context += "Chưa có lịch sử trò chuyện";
+    }
+    
+    return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy HƯỚNG DẪN CÁCH TIẾP CẬN bài tập sau theo yêu cầu:
+
+QUY TẮC BẮT BUỘC:
+1. KHÔNG sử dụng ký tự * trong bất kỳ trường hợp nào
+2. KHÔNG được đưa ra đáp án cuối cùng
+3. KHÔNG tự động giải bài hoàn chỉnh
+4. Chỉ ở vai trò gợi mở tư duy
+5. Xưng hô: mình (cho bot) và bạn (cho người dùng)
+
+Yêu cầu:
+1. Hướng dẫn từng bước tiếp cận bài toán
+2. Giải thích cách suy nghĩ
+3. Công thức viết bằng chữ, không dùng ký hiệu toán học
+4. KHÔNG đưa ra lời giải hoàn chỉnh
+5. KHÔNG đưa ra bài tập tương tự
+
+Phân tích trước đó:
+${analysis}
+
+Câu hỏi hiện tại: ${question}
+
+Hướng dẫn tiếp cận:
+1. `;
+}
+
+function generateGeneralPrompt(question, subject, history) {
+    const subjectName = 
+        subject === 'toan-hoc' ? 'Toán Học' : 
+        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    let context = "Lịch sử trò chuyện gần đây:\n";
+    if (history && history.length > 0) {
+        context += history.slice(-3).map(msg => 
+            `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
+        ).join('\n');
+    } else {
+        context += "Chưa có lịch sử trò chuyện";
+    }
+    
+    return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy trả lời câu hỏi sau một cách ngắn gọn, dễ hiểu:
+
+QUY TẮC BẮT BUỘC:
+1. KHÔNG sử dụng ký tự * trong bất kỳ trường hợp nào
+2. Xưng hô: mình (cho bot) và bạn (cho người dùng)
+3. KHÔNG đưa ra lời giải hoàn chỉnh cho bài tập
+4. Chỉ gợi mở hướng giải quyết
+
+Yêu cầu:
+- Trả lời trực tiếp vào câu hỏi
+- Giải thích ngắn gọn, rõ ràng
+- Dùng từ ngữ đơn giản, gần gũi
+- Nếu là câu hỏi yêu cầu giải bài, hãy hướng dẫn cách tiếp cận chứ không giải chi tiết
+
+Lịch sử chat:
+${context}
+
+Câu hỏi hiện tại: ${question}
+
+Trả lời:`;
+}
+
+function generateSimilarExercisesPrompt(question, subject, guidance) {
+    const subjectName = 
+        subject === 'toan-hoc' ? 'Toán Học' : 
+        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    return `Bạn là một học sinh giỏi ${subjectName} THPT. Vừa rồi bạn đã phân tích bài tập sau:
+    
+Bài tập gốc:
+${question}
+
+Hướng dẫn tiếp cận:
+${guidance}
+
+Hãy tạo 2 bài tập tương tự cùng chủ đề và cùng mức độ khó để bạn có thể luyện tập thêm. Chỉ đưa ra đề bài, không cần giải.
+
+QUY TẮC:
+1. KHÔNG sử dụng ký tự *
+2. Chỉ đưa ra đề bài
+3. Cùng chủ đề và mức độ khó
+4. Đánh số thứ tự bài tập
+
+Bài tập tương tự:
+1. `;
+}
+
+function generateReviewSuggestionPrompt(topic, subject, mistakes) {
+    const subjectName = 
+        subject === 'toan-hoc' ? 'Toán Học' : 
+        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+    
+    return `Bạn là một học sinh giỏi ${subjectName} THPT. Bạn đang gặp khó khăn với chủ đề ${topic} (đã mắc ${mistakes} lỗi). Hãy:
+    
+1. Giải thích ngắn gọn những điểm quan trọng cần nhớ về chủ đề này
+2. Gợi ý 1-2 bài tập đơn giản để bạn có thể luyện tập lại
+
+YÊU CẦU:
+1. KHÔNG sử dụng ký tự *
+2. Giải thích bằng ngôn ngữ đơn giản, dễ hiểu
+3. Chỉ đưa ra đề bài, không giải chi tiết
+4. Xưng hô: mình (cho bot) và bạn (cho người dùng)
+
+Gợi ý ôn tập:
+1. Kiến thức quan trọng:
+- 
+- 
+
+2. Bài tập luyện lại:
+- 
+- `;
+}
+
+async function checkStudentAnswer(studentAnswer) {
+    try {
+        if (!currentProblem || !currentProblem.question) {
+            throw new Error("Không tìm thấy bài toán hiện tại");
+        }
+
+        loadingIndicator.style.display = 'block';
+        
+        const prompt = `Bạn là một học sinh giỏi ${currentSubject === 'toan-hoc' ? 'Toán Học' : currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học'} THPT. 
+Hãy kiểm tra đáp án sau đây của bạn học với bài toán sau:
+
+Bài toán:
+${currentProblem.question}
+
+Đáp án bạn học đưa ra:
+${studentAnswer}
+
+Hãy phân tích và trả lời theo cấu trúc sau:
+[KẾT_QUẢ] // "ĐÚNG" hoặc "SAI"
+[LỖI_SAI] // Chỉ ra lỗi sai cụ thể (nếu có)
+[GỢI_Ý] // Gợi ý cách làm lại (không đưa đáp án)
+[BÀI_TẬP_TƯƠNG_TỰ] // 2 bài tập tương tự (chỉ đề bài)
+
+YÊU CẦU:
+- Phản hồi phải bắt đầu bằng [KẾT_QUẢ]
+- Xưng hô mình - bạn
+- Khi đúng thì khen ngợi và đưa ra bài tập tương tự
+- Khi sai chỉ chỉ ra lỗi sai và gợi ý
+- Không dùng ký tự *`;
+
+        const ketQua = await moHinh.generateContent(prompt);
+        const phanHoi = await ketQua.response;
+        let traLoiBot = phanHoi.text().trim();
+        
+        loadingIndicator.style.display = 'none';
+        
+        const ketQuaMatch = traLoiBot.match(/\[KẾT_QUẢ\]\s*(ĐÚNG|SAI)/i);
+        const loiSaiMatch = traLoiBot.match(/\[LỖI_SAI\]\s*([\s\S]*?)(\[GỢI_Ý\]|$)/i);
+        const goiYMatch = traLoiBot.match(/\[GỢI_Ý\]\s*([\s\S]*?)(\[BÀI_TẬP_TƯƠNG_TỰ\]|$)/i);
+        const baiTapMatch = traLoiBot.match(/\[BÀI_TẬP_TƯƠNG_TỰ\]\s*([\s\S]*)/i);
+        
+        if (!ketQuaMatch || !loiSaiMatch) {
+            throw new Error("Phản hồi không đúng định dạng");
+        }
+
+        const isCorrect = ketQuaMatch[1].toUpperCase() === "ĐÚNG";
+        const loiSai = loiSaiMatch[1].trim();
+        const goiY = goiYMatch ? goiYMatch[1].trim() : null;
+        const baiTapTuongTu = baiTapMatch ? baiTapMatch[1].trim() : null;
+
+        const topicMatch = currentProblem.analysis.match(/2\. Chủ đề:\s*(.+)/);
+        const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
+        
+        if (isCorrect) {
+            let response = `<div class="exercise-suggestion">
+                <div class="exercise-suggestion-title"><i class="fas fa-check-circle"></i> Chính xác! Bạn làm rất tốt!</div>
+                <div style="margin: 10px 0; padding: 10px; background-color: #e8f5e9; border-radius: 8px;">
+                    <i class="fas fa-medal" style="color: #ffd700; margin-right: 5px;"></i>
+                    Mình rất ấn tượng với cách bạn giải quyết vấn đề này! Bạn đã áp dụng đúng phương pháp và tính toán chính xác.
+                </div>`;
+            
+            if (loiSai) {
+                response += `<div style="margin: 10px 0; padding: 10px; background-color: #e3f2fd; border-radius: 8px;">
+                    ${loiSai.replace(/\n/g, '<br>')}
+                </div>`;
+            }
+            
+            if (baiTapTuongTu) {
+                const baiTaps = baiTapTuongTu.split('\n').filter(line => line.trim()).slice(0, 2);
+                response += `<div class="similar-exercise">
+                    <div class="similar-exercise-title"><i class="fas fa-lightbulb"></i> Bài tập tương tự để luyện tập thêm</div>
+                    <ol style="margin-left: 20px;">
+                        ${baiTaps.map(baiTap => `<li>${baiTap.trim()}</li>`).join('')}
+                    </ol>
+                    <div style="margin-top: 10px; font-style: italic;">
+                        Hãy thử sức với các bài tập này để củng cố kiến thức nhé!
+                    </div>
+                </div>`;
+            }
+            
+            response += `</div>`;
+            
+            themTinNhanVaoGiaoDien("bot", response);
+            addToChatHistory("bot", response, currentSubject);
+            currentProblem.solved = true;
+            
+            updateUserProgress(topic, true);
+            
+        } else {
+            let response = `<div class="question-box">
+                <div class="question-box-title"><i class="fas fa-exclamation-circle"></i> Đáp án chưa chính xác</div>
+                <strong>Lỗi sai:</strong><br>
+                ${loiSai.replace(/\n/g, '<br>')}<br><br>
+                <strong>Gợi ý làm lại:</strong><br>
+                ${goiY ? goiY.replace(/\n/g, '<br>') : 'Hãy xem lại các bước giải và công thức đã sử dụng'}<br><br>
+                Bạn hãy thử làm lại và gửi đáp án mới nhé!
+            </div>`;
+            
+            themTinNhanVaoGiaoDien("bot", response);
+            addToChatHistory("bot", response, currentSubject);
+            
+            updateUserProgress(topic, false);
+        }
+    } catch (error) {
+        console.error("Lỗi khi kiểm tra đáp án:", error);
+        loadingIndicator.style.display = 'none';
+        const response = `<div class="question-box">
+            <div class="question-box-title"><i class="fas fa-times-circle"></i> Lỗi hệ thống</div>
+            Mình chưa thể kiểm tra đáp án ngay bây giờ.<br>
+            Bạn vui lòng:<br>
+            1. Kiểm tra lại cách giải<br>
+            2. Thử lại sau ít phút<br>
+            Xin lỗi bạn vì sự bất tiện này!
+        </div>`;
+        themTinNhanVaoGiaoDien("bot", response);
+        addToChatHistory("bot", response, currentSubject);
+    }
+}
+
+function isAskingForSolution(message) {
+    return solutionRequestPhrases.test(message.toLowerCase());
+}
+
+function isHomeworkProblem(message) {
+    if (!message) return false;
+    
+    const problemIndicators = [
+        "tính", "xác định", "cho biết", "bài toán", "tìm", 
+        "vận tốc", "khối lượng", "nồng độ", "phản ứng", 
+        "điện tích", "lực", "gia tốc", "nhiệt độ", "áp suất",
+        "bài tập", "giải bài", "làm bài"
+    ];
+    
+    const subjectTerms = {
+        'toan-hoc': ["toán", "phương trình", "hàm số", "đạo hàm", "tích phân", "hình học"],
+        'vat-ly': ["vật lý", "chuyển động", "điện", "từ trường", "quang học", "nhiệt"],
+        'hoa-hoc': ["hóa học", "phản ứng", "chất", "nguyên tử", "phân tử", "mol"]
+    };
+    
+    const hasNumbers = /\d/.test(message);
+    
+    const hasProblemIndicators = problemIndicators.some(indicator => 
+        message.toLowerCase().includes(indicator)
+    );
+    
+    const hasSubjectTerms = currentSubject && subjectTerms[currentSubject] ? 
+        subjectTerms[currentSubject].some(term => message.toLowerCase().includes(term)) : 
+        false;
+    
+    return (hasNumbers && hasProblemIndicators) || 
+           (hasSubjectTerms && hasProblemIndicators) ||
+           solutionRequestPhrases.test(message.toLowerCase());
+}
+
+function processAnalysisResponse(response, originalQuestion) {
+    if (!currentProblem || currentProblem.question !== originalQuestion) {
+        currentProblem = {
+            question: originalQuestion,
+            analysis: response,
+            solved: false,
+            countedAsCompleted: false
+        };
+        
+        const topicMatch = response.match(/2\. Chủ đề:\s*(.+)/);
+        const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
+        updateUserProgress(topic);
+    }
+    
+    let formattedResponse = response.replace(/\*/g, '');
+    
+    let summaryPart = "";
+    const summaryMatch = response.match(/1\. Tóm tắt đề bài:\s*([\s\S]*?)(2\. Chủ đề:|$)/i);
+    if (summaryMatch && summaryMatch[1]) {
+        const summaryContent = summaryMatch[1].trim();
+        if (summaryContent && !summaryContent.includes("Chủ đề")) {
+            summaryPart = `<div class="problem-summary">
+                <div class="summary-title"><i class="fas fa-list-alt"></i> Tóm tắt đề bài</div>
+                ${summaryContent.replace(/\n/g, '<br>')}
+            </div>`;
+        }
+    }
+    
+    formattedResponse = formattedResponse
+        .replace(/1\. Tóm tắt đề bài:\s*/g, '')
+        .replace(/2\. Chủ đề:\s*/g, '<strong>2. Chủ đề:</strong> ')
+        .replace(/3\. Kiến thức liên quan:\s*/g, '<strong>3. Kiến thức liên quan:</strong>')
+        .replace(/- Khái niệm:\s*(.+)/g, '<div class="formula">- Khái niệm: $1</div>')
+        .replace(/- Công thức:\s*(.+)/g, '<div class="formula">- Công thức: $1</div>')
+        .replace(/4\. Câu hỏi định hướng:\s*/g, '<strong>4. Câu hỏi định hướng:</strong>')
+        .replace(/5\. Bài tập tương tự:\s*/g, '<strong>5. Bài tập tương tự:</strong>')
+        .replace(/\n/g, '<br>')
+        .replace(/(<br>|\n)\d+\.\s*/g, '$1- ');
+    
+    return `${summaryPart}<div class="knowledge-box">
+        <div class="knowledge-box-title"><i class="fas fa-lightbulb"></i> Phân tích bài toán</div>
+        ${formattedResponse}
+    </div>`;
+}
+
+async function processSolutionGuidanceResponse(response, originalQuestion, subject) {
+    currentProblem.solved = true;
+    
+    const topicMatch = currentProblem.analysis.match(/2\. Chủ đề: (.+)/);
+    const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
+    
+    updateUserProgress(topic, true);
+    
+    let formattedResponse = response;
+    
+    formattedResponse = formattedResponse.replace(/\*/g, '');
+    
+    return formattedResponse;
+}
+
+async function checkForReviewSuggestion(topic) {
+    if (!currentSubject || !userProgress[currentSubject]?.topics[topic]) return;
+    
+    const topicStats = userProgress[currentSubject].topics[topic];
+    const mistakeRate = topicStats.mistakes / topicStats.total;
+    
+    if (mistakeRate > 0.5) {
+        try {
+            const prompt = generateReviewSuggestionPrompt(topic, currentSubject, topicStats.mistakes);
+            const ketQua = await moHinh.generateContent(prompt);
+            const phanHoi = await ketQua.response;
+            const reviewSuggestion = phanHoi.text().replace(/\*/g, '');
+            
+            const formattedResponse = `<div class="review-suggestion">
+                <div class="review-suggestion-title"><i class="fas fa-exclamation-triangle"></i> Gợi ý ôn tập</div>
+                ${reviewSuggestion.replace(/\n/g, '<br>')}
+            </div>`;
+            
+            themTinNhanVaoGiaoDien("bot", formattedResponse);
+            addToChatHistory("bot", formattedResponse, currentSubject);
+            
+            if (!weaknessAreas[currentSubject][topic]) {
+                weaknessAreas[currentSubject][topic] = [];
+                saveWeaknessAreas();
+            }
+            
+        } catch (error) {
+            console.error("Lỗi khi tạo gợi ý ôn tập:", error);
+        }
+    }
+}
+
+async function guiTinNhan() {
+    const tinNhanNguoiDung = oNhapTinNhan.value.trim();
+    if (!tinNhanNguoiDung && !uploadedFile) return;
+
+    if (!uploadedFile) {
+        themTinNhanVaoGiaoDien("nguoi-dung", tinNhanNguoiDung);
+        addToChatHistory("nguoi-dung", tinNhanNguoiDung, currentSubject);
+        oNhapTinNhan.value = '';
+        adjustTextareaHeight();
+    }
+
+    if (tinNhanNguoiDung.toLowerCase().includes("bài kiểm tra")) {
+        const baiKiemTra = await generateTest(currentSubject, tinNhanNguoiDung);
+        if (baiKiemTra) {
+            currentTest = baiKiemTra;
+            isWaitingForTestAnswers = true;
+            
+            const formattedTest = `<div class="test-container" style="border: 2px solid #3a7bd5; border-radius: 10px; padding: 15px; margin-bottom: 20px; background-color: #f8f9fa;">
+                <div style="text-align: center; font-weight: bold; font-size: 1.2rem; color: #3a7bd5; margin-bottom: 15px;">
+                    BÀI KIỂM TRA ${currentSubject === 'toan-hoc' ? 'TOÁN HỌC' : currentSubject === 'vat-ly' ? 'VẬT LÝ' : 'HÓA HỌC'} - 10 CÂU TỰ LUẬN
+                </div>
+                <div style="margin-bottom: 15px;">
+                    ${baiKiemTra.replace(/\n/g, '<br>').replace(/\[.*?\]/g, '')}
+                </div>
+                <div style="font-style: italic; color: #666;">
+                    Gửi câu trả lời theo định dạng: 1. [đáp án 1], 2. [đáp án 2], ..., 10. [đáp án 10]
+                </div>
+            </div>`;
+            
+            themTinNhanVaoGiaoDien("bot", formattedTest);
+            addToChatHistory("bot", formattedTest, currentSubject);
+        } else {
+            const errorMsg = "Xin lỗi, mình chưa thể tạo bài kiểm tra ngay lúc này. Vui lòng thử lại sau!";
+            themTinNhanVaoGiaoDien("bot", errorMsg);
+            addToChatHistory("bot", errorMsg, currentSubject);
+        }
+        
+        loadingIndicator.style.display = 'none';
+        return;
+    }
+
+    if (isWaitingForTestAnswers && currentTest) {
+        const ketQuaChamBai = await gradeTest(currentTest, tinNhanNguoiDung);
+        
+        if (ketQuaChamBai) {
+            const formattedResult = `
+                <div class="test-result">
+                    <div class="test-header">KẾT QUẢ CHẤM BÀI</div>
+                    <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 8px;">
+                        ${ketQuaChamBai.replace(/\n/g, '<br>')}
+                    </div>
+                </div>
+            `;
+            
+            themTinNhanVaoGiaoDien("bot", formattedResult);
+            addToChatHistory("bot", formattedResult, currentSubject);
+            
+            currentTest = null;
+            isWaitingForTestAnswers = false;
+        } else {
+            const errorMsg = "Xin lỗi, mình chưa thể chấm bài...";
+            themTinNhanVaoGiaoDien("bot", errorMsg);
+            addToChatHistory("bot", errorMsg, currentSubject);
+        }
+        
+        loadingIndicator.style.display = 'none';
+        return;
+    }
+
+    oNhapTinNhan.value = '';
+    adjustTextareaHeight();
+
+    loadingIndicator.style.display = 'block';
+    khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
+
+    try {
+        const loiChao = ["chào", "hello", "xin chào"];
+        if (loiChao.some(chao => tinNhanNguoiDung.toLowerCase().includes(chao))) {
+            setTimeout(() => {
+                loadingIndicator.style.display = 'none';
+                const subjectName = 
+                    currentSubject === 'toan-hoc' ? 'Toán Học' : 
+                    currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+                
+                const response = `TriGuide chào bạn!!! Mình có thể giúp gì cho bạn về môn ${subjectName} không?`;
+                themTinNhanVaoGiaoDien("bot", response);
+                addToChatHistory("bot", response, currentSubject);
+            }, 1000);
+            return;
+        }
+
+        if (currentProblem && !currentProblem.solved && isPotentialAnswer(tinNhanNguoiDung)) {
+            await checkStudentAnswer(tinNhanNguoiDung);
+            return;
+        }
+
+        const isAskingForHomework = homeworkRequestPhrases.test(tinNhanNguoiDung.toLowerCase());
+        if (isAskingForHomework) {
+            setTimeout(() => {
+                loadingIndicator.style.display = 'none';
+                const subjectName = 
+                    currentSubject === 'toan-hoc' ? 'Toán Học' : 
+                    currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+                
+                const response = `Bạn muốn bài tập về chủ đề nào trong môn ${subjectName}?`;
+                themTinNhanVaoGiaoDien("bot", response);
+                addToChatHistory("bot", response, currentSubject);
+            }, 1500);
+            return;
+        }
+
+        if (tinNhanNguoiDung && !laCauHoiTHPT(tinNhanNguoiDung)) {
+            setTimeout(() => {
+                loadingIndicator.style.display = 'none';
+                const response = "Xin lỗi bạn, mình chỉ có thể giúp với các câu hỏi và bài tập ở cấp độ THPT.";
+                themTinNhanVaoGiaoDien("bot", response);
+                addToChatHistory("bot", response, currentSubject);
+            }, 1000);
+            return;
+        }
+
+        const recentHistory = chatHistory.filter(msg => msg.subject === currentSubject).slice(-3);
+        
+        const isAskingForSolution = solutionRequestPhrases.test(tinNhanNguoiDung.toLowerCase());
+        
+        if (currentProblem && !currentProblem.solved && isAskingForSolution) {
+            const prompt = generateSolutionGuidancePrompt(tinNhanNguoiDung, currentSubject, recentHistory, currentProblem.analysis);
+            
+            const ketQua = await moHinh.generateContent(prompt);
+            const phanHoi = await ketQua.response;
+            let traLoiBot = phanHoi.text();
+            
+            traLoiBot = await processSolutionGuidanceResponse(traLoiBot, tinNhanNguoiDung, currentSubject);
+            
+            loadingIndicator.style.display = 'none';
+            themTinNhanVaoGiaoDien("bot", traLoiBot);
+            addToChatHistory("bot", traLoiBot, currentSubject);
+            
+            const topicMatch = currentProblem.analysis.match(/2\. Chủ đề: (.+)/);
+            if (topicMatch && topicMatch[1]) {
+                const topic = topicMatch[1].trim();
+                checkForReviewSuggestion(topic);
+            }
+            
+            uploadedFile = null;
+            return;
+        }
+        
+        const isHomeworkProblemValue = isHomeworkProblem(tinNhanNguoiDung) && !currentProblem;
+        let prompt;
+        
+        if (isHomeworkProblemValue) {
+            if (!currentProblem || currentProblem.question !== tinNhanNguoiDung) {
+                prompt = generateAnalysisPrompt(tinNhanNguoiDung, currentSubject, recentHistory);
+            } else {
+                prompt = generateSolutionGuidancePrompt(tinNhanNguoiDung, currentSubject, recentHistory, currentProblem.analysis);
+            }
+        } else {
+            prompt = generateGeneralPrompt(tinNhanNguoiDung, currentSubject, recentHistory);
+        }
+        
+        const ketQua = await moHinh.generateContent(prompt);
+        const phanHoi = await ketQua.response;
+        let traLoiBot = phanHoi.text();
+        
+        traLoiBot = traLoiBot.replace(/\*/g, '');
+        
+        if (isHomeworkProblemValue) {
+            traLoiBot = processAnalysisResponse(traLoiBot, tinNhanNguoiDung);
+            
+            if (!traLoiBot.includes("knowledge-box")) {
+                currentProblem = null;
+            }
+        }
+        
+        loadingIndicator.style.display = 'none';
+        themTinNhanVaoGiaoDien("bot", traLoiBot);
+        addToChatHistory("bot", traLoiBot, currentSubject);
+        
+        uploadedFile = null;
+
+    } catch (loi) {
+        console.error("Lỗi khi xử lý câu hỏi: ", loi);
+        loadingIndicator.style.display = 'none';
+        const response = `<div class="question-box">
+            <div class="question-box-title"><i class="fas fa-times-circle"></i> Lỗi hệ thống</div>
+            Mình chưa thể xử lý yêu cầu ngay bây giờ.<br>
+            Bạn vui lòng:<br>
+            1. Kiểm tra lại câu hỏi<br>
+            2. Thử lại sau ít phút<br>
+            Xin lỗi bạn vì sự bất tiện này!
+        </div>`;
+        themTinNhanVaoGiaoDien("bot", response);
+        addToChatHistory("bot", response, currentSubject);
+    }
+}
+
+function isPotentialAnswer(message) {
+    if (!message) return false;
+    
+    const containsNumber = /\d/.test(message);
+    
+    const isShort = message.split(/\s+/).length <= 5;
+    
+    const isNotQuestion = !/(\?|hỏi|giải|giúp|tại sao|như thế nào)/i.test(message);
+    
+    return (containsNumber && isShort && isNotQuestion) || 
+           /(đáp án|kết quả|là|bằng)/i.test(message);
+}
+
+function laCauHoiTHPT(cauHoi) {
+    if (!cauHoi) return true;
+    
+    const cauHoiThuong = cauHoi.toLowerCase();
+    return !generalExcludeKeywords.some(tuKhoa => cauHoiThuong.includes(tuKhoa));
+}
+
+function selectSubject(subject) {
+    currentSubject = subject;
+    subjectScreen.style.display = 'none';
+    chatbotContainer.style.display = 'flex';
+    
+    loadSubjectChatHistory(subject);
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+
+async function generateTest(subject, userMessage) {
+    try {
+        loadingIndicator.style.display = 'block';
+        
+        const subjectName = subject === 'toan-hoc' ? 'Toán Học' : 
+                          subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        let topic = "nhiều chủ đề";
+        let difficulty = "trung bình";
+        
+        const topicMatch = userMessage.match(/chủ đề (.+?)( mức|$)/i);
+        if (topicMatch) topic = topicMatch[1];
+        
+        const diffMatch = userMessage.match(/mức độ (dễ|trung bình|khó)/i);
+        if (diffMatch) difficulty = diffMatch[1].toLowerCase();
+        
+        const prompt = `Bạn là giáo viên ${subjectName} THPT. Hãy tạo bài kiểm tra 10 câu tự luận với:
+- Chủ đề: ${topic}
+- Mức độ: ${difficulty}
+- Mỗi câu có số thứ tự rõ ràng (1. ..., 2. ..., ...)
+- Chỉ đưa câu hỏi, không đáp án
+- KHÔNG sử dụng ký hiệu * hoặc $ trong bất kỳ trường hợp nào
+- Định dạng:
+
+[BÀI KIỂM TRA ${subjectName.toUpperCase()} - ${topic.toUpperCase()}]
+1. Câu hỏi 1...
+...
+10. Câu hỏi 10...
+
+[KẾT THÚC]`;
+
+        const ketQua = await moHinh.generateContent(prompt);
+        const phanHoi = await ketQua.response;
+        let baiKiemTra = phanHoi.text().trim();
+        
+        if (!baiKiemTra.includes("[BÀI KIỂM TRA")) {
+            baiKiemTra = `[BÀI KIỂM TRA ${subjectName.toUpperCase()} - ${topic.toUpperCase()}]\n${baiKiemTra}\n[KẾT THÚC]`;
+        }
+        
+        baiKiemTra = baiKiemTra.replace(/[\*\$]/g, '');
+        
+        loadingIndicator.style.display = 'none';
+        return baiKiemTra;
+    } catch (error) {
+        console.error("Lỗi khi tạo bài kiểm tra:", error);
+        loadingIndicator.style.display = 'none';
+        return null;
+    }
+}
+
+function saveTestResult(testQuestions, studentAnswers, result) {
+    if (!currentSubject) return;
+    
+    if (result.includes("Xin lỗi, có lỗi khi chấm bài")) {
+        console.warn("Không lưu kết quả vì chấm bài bị lỗi:", result);
+        return;
+    }
+    
+    let score = 0;
+    const scoreMatch = result.match(/Tổng điểm:\s*(\d+\.?\d*)\s*(?:\/|out of)\s*10/i);
+    if (scoreMatch && scoreMatch[1]) {
+        score = parseFloat(scoreMatch[1]);
+    } else {
+        const numberMatch = result.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:\/|out of)\s*10\b/i);
+        if (numberMatch && numberMatch[1]) {
+            score = parseFloat(numberMatch[1]);
+        } else {
+            console.warn("Không thể trích xuất điểm từ kết quả:", result);
+            return;
+        }
+    }
+    
+    score = Math.min(Math.max(score, 0), 10);
+    
+    const topicMatch = testQuestions.match(/BÀI KIỂM TRA .+? - (.+?)\]/i);
+    const topic = topicMatch ? topicMatch[1] : "Không xác định";
+    
+    if (!testHistory[currentSubject]) {
+        testHistory[currentSubject] = [];
+    }
+    
+    testHistory[currentSubject].push({
+        date: new Date().toISOString(),
+        topic: topic,
+        score: score,
+        questions: testQuestions,
+        answers: studentAnswers,
+        result: result,
+        comment: result.includes("Nhận xét:") ? 
+                 result.split("Nhận xét:")[1].trim() : 
+                 "Không có nhận xét"
+    });
+    
+    if (testHistory[currentSubject].length > 10) {
+        testHistory[currentSubject] = testHistory[currentSubject].slice(-10);
+    }
+    
+    saveTestHistory();
+}
+
+async function gradeTest(testQuestions, studentAnswers) {
+    try {
+        loadingIndicator.style.display = 'block';
+        
+        if (!testQuestions || !studentAnswers) {
+            throw new Error("Thiếu dữ liệu bài kiểm tra hoặc câu trả lời");
+        }
+
+        const prompt = `Bạn là giáo viên THPT. Hãy chấm bài kiểm tra theo yêu cầu sau:
+        
+YÊU CẦU:
+1. Đánh giá từng câu theo mẫu:
+   Câu 1: [Đúng/Sai]
+   - Giải thích: [nếu sai]
+2. Tính tổng điểm (mỗi câu đúng 1 điểm)
+3. Đưa ra nhận xét chung
+4. KHÔNG dùng ký hiệu * hoặc $
+5. Chỉ dùng ký hiệu toán cơ bản (+, -, ×, ÷)
+
+Bài kiểm tra:
+${testQuestions}
+
+Câu trả lời học sinh:
+${studentAnswers}
+
+Kết quả chấm bài:
+`;
+
+        const ketQua = await moHinh.generateContent(prompt);
+        const phanHoi = await ketQua.response;
+        let ketQuaChamBai = phanHoi.text();
+        
+        ketQuaChamBai = ketQuaChamBai.replace(/[\*\$]/g, '');
+        
+        if (!ketQuaChamBai.includes("Câu 1") || !ketQuaChamBai.includes("Tổng điểm")) {
+            throw new Error("Kết quả chấm bài không đúng định dạng");
+        }
+        
+        saveTestResult(testQuestions, studentAnswers, ketQuaChamBai);
+        
+        loadingIndicator.style.display = 'none';
+        return ketQuaChamBai;
+        
+    } catch (error) {
+        console.error("Lỗi khi chấm bài:", error);
+        loadingIndicator.style.display = 'none';
+        
+        return `Xin lỗi, có lỗi khi chấm bài:\n${error.message}\nVui lòng kiểm tra lại câu trả lời và thử lại.`;
+    }
+}
+</script>
+</body>
+</html>
