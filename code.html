@@ -1060,16 +1060,16 @@
 
     // KHAI BÁO 3 API KEY CHO 3 MÔN HỌC
     const API_KEYS = {
-        'toan-hoc': "AIzaSyCkMQR9STDqptOaQgovt7mW-vUCrHyhUeA", // API cho Toán
-        'vat-ly': "AIzaSyCkMQR9STDqptOaQgovt7mW-vUCrHyhUeA",   // API cho Vật Lý
-        'hoa-hoc': "AIzaSyCkMQR9STDqptOaQgovt7mW-vUCrHyhUeA"   // API cho Hóa Học
+        'toan-hoc': "AIzaSyCeCqOYnzKceYD4iAV8M51D_dnX4pKJEA4", // API cho Toán
+        'vat-ly': "AIzaSyCeCqOYnzKceYD4iAV8M51D_dnX4pKJEA4",   // API cho Vật Lý
+        'hoa-hoc': "AIzaSyCeCqOYnzKceYD4iAV8M51D_dnX4pKJEA4"   // API cho Hóa Học
     };
 
     // Hàm lấy model AI theo môn học
     function getAIModel(subject) {
         const apiKey = API_KEYS[subject] || API_KEYS['toan-hoc'];
         const moHinhAI = new GoogleGenerativeAI(apiKey);
-        return moHinhAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" });
+        return moHinhAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
     }
 
     // BIẾN TOÀN CỤC - TÁCH RIÊNG CHO TỪNG MÔN HỌC
