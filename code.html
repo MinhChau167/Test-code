@@ -1058,10 +1058,56 @@
     const db = firebase.firestore();
    
 
-    const KHOA_API = "AIzaSyAQMglgiKEHY8XznNf9ZIdjYMnKgH9DhJg"; 
-    const moHinhAI = new GoogleGenerativeAI(KHOA_API);
-    const moHinh = moHinhAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" });
+    // KHAI BÁO 3 API KEY CHO 3 MÔN HỌC
+    const API_KEYS = {
+        'toan-hoc': "AIzaSyCkMQR9STDqptOaQgovt7mW-vUCrHyhUeA", // API cho Toán
+        'vat-ly': "AIzaSyCkMQR9STDqptOaQgovt7mW-vUCrHyhUeA",   // API cho Vật Lý
+        'hoa-hoc': "AIzaSyCkMQR9STDqptOaQgovt7mW-vUCrHyhUeA"   // API cho Hóa Học
+    };
 
+    // Hàm lấy model AI theo môn học
+    function getAIModel(subject) {
+        const apiKey = API_KEYS[subject] || API_KEYS['toan-hoc'];
+        const moHinhAI = new GoogleGenerativeAI(apiKey);
+        return moHinhAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" });
+    }
+
+    // BIẾN TOÀN CỤC - TÁCH RIÊNG CHO TỪNG MÔN HỌC
+    let currentSubject = '';
+    
+    // State riêng cho từng môn học
+    const subjectStates = {
+        'toan-hoc': {
+            currentProblem: null,
+            currentTest: null,
+            isWaitingForTestAnswers: false
+        },
+        'vat-ly': {
+            currentProblem: null,
+            currentTest: null,
+            isWaitingForTestAnswers: false
+        },
+        'hoa-hoc': {
+            currentProblem: null,
+            currentTest: null,
+            isWaitingForTestAnswers: false
+        }
+    };
+
+    let chatHistory = [];
+    let userProgress = {}; 
+    let weaknessAreas = {};
+    let lastReminderDate = null; 
+    let currentTest = null;
+    let isWaitingForTestAnswers = false;
+    let testHistory = {}; 
+    const generalExcludeKeywords = [
+        "đại học", "cao học", "nghiên cứu", "phân tích chuyên sâu", "triết học",
+        "kinh tế vĩ mô", "chính trị quốc tế", "tôn giáo", "đức tin"
+    ];
+    
+    const homeworkRequestPhrases = /(cho (tôi|em) bài tập|xin bài tập|gợi ý bài tập|bài tập về)/;
+    const solutionRequestPhrases = /(giải bài|giải giúp|đáp án|kết quả|hướng dẫn giải|bài giải|làm bài|giải thích|cách làm)/;
 
     const subjectScreen = document.getElementById('subjectScreen');
     const chatbotContainer = document.getElementById('chatbot-container');
@@ -1071,7 +1117,6 @@
     const loadingIndicator = document.getElementById('loadingIndicator');
     const subjectButtons = document.querySelectorAll('.subject-button');
     const backButton = document.getElementById('backButton');
- 
     const progressToggle = document.getElementById('progressToggle');
     const progressContainer = document.getElementById('progressContainer');
     const closeProgress = document.getElementById('closeProgress');
@@ -1081,461 +1126,464 @@
     const closeReminder = document.getElementById('closeReminder');
     const reminderContent = document.getElementById('reminderContent');
 
-  
-    let currentSubject = '';
-    let chatHistory = [];
- 
-    let currentProblem = null;
-    let userProgress = {}; 
-    let weaknessAreas = {};
-    let lastReminderDate = null; 
-
-let currentTest = null;
-let isWaitingForTestAnswers = false;
-  
-    let testHistory = {}; 
-    const generalExcludeKeywords = [
-        "đại học", "cao học", "nghiên cứu", "phân tích chuyên sâu", "triết học",
-        "kinh tế vĩ mô", "chính trị quốc tế", "tôn giáo", "đức tin"
-    ];
-    
- 
-    const homeworkRequestPhrases = /(cho (tôi|em) bài tập|xin bài tập|gợi ý bài tập|bài tập về)/;
-    
- 
-    const solutionRequestPhrases = /(giải bài|giải giúp|đáp án|kết quả|hướng dẫn giải|bài giải|làm bài|giải thích|cách làm)/;
-function drawTestHistoryChart(container) {
-    if (!currentSubject || !testHistory[currentSubject] || testHistory[currentSubject].length === 0) {
-        console.log("No data to display chart for subject:", currentSubject);
-        return;
+    // Hàm lấy state của môn học hiện tại
+    function getCurrentSubjectState() {
+        if (!currentSubject) return {};
+        return subjectStates[currentSubject] || {};
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    container.appendChild(canvas);
-
-    const ctx = canvas.getContext('2d');
-
-    if (canvas.chartInstance) {
-        canvas.chartInstance.destroy();
+    // Hàm cập nhật state của môn học hiện tại
+    function updateCurrentSubjectState(newState) {
+        if (currentSubject) {
+            subjectStates[currentSubject] = { ...subjectStates[currentSubject], ...newState };
+        }
     }
 
-    const history = testHistory[currentSubject];
-    
-    const labels = history.map((test, index) => `Lần ${index + 1}`);
-    const scores = history.map(test => Math.min(Math.max(parseFloat(test.score) || 0, 0), 10));
-    const dates = history.map(test => new Date(test.date).toLocaleDateString());
+    // Hàm reset state khi chuyển môn
+    function resetSubjectState() {
+        if (currentSubject) {
+            subjectStates[currentSubject] = {
+                currentProblem: null,
+                currentTest: null,
+                isWaitingForTestAnswers: false
+            };
+        }
+    }
 
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(58, 123, 213, 0.8)');
-    gradient.addColorStop(1, 'rgba(0, 210, 255, 0.2)');
+    function drawTestHistoryChart(container) {
+        if (!currentSubject || !testHistory[currentSubject] || testHistory[currentSubject].length === 0) {
+            console.log("No data to display chart for subject:", currentSubject);
+            return;
+        }
 
-    canvas.chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Điểm số',
-                data: scores,
-                backgroundColor: gradient,
-                borderColor: 'rgba(58, 123, 213, 1)',
-                borderWidth: 3,
-                tension: 0.3,
-                fill: true,
-                pointBackgroundColor: 'white',
-                pointBorderColor: 'rgba(58, 123, 213, 1)',
-                pointRadius: 5,
-                pointHoverRadius: 7
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        font: {
-                            size: 14
-                        }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return `Điểm: ${context.raw}/10`;
-                        },
-                        afterLabel: function(context) {
-                            return `Ngày: ${dates[context.dataIndex]}`;
-                        }
-                    },
-                    bodyFont: {
-                        size: 14
-                    },
-                    titleFont: {
-                        size: 16
-                    }
-                },
-                title: {
-                    display: true,
-                    text: 'BIỂU ĐỒ TIẾN BỘ',
-                    font: {
-                        size: 18
-                    },
-                    padding: {
-                        top: 10,
-                        bottom: 20
-                    }
-                }
+        const canvas = document.createElement('canvas');
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        container.appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+
+        if (canvas.chartInstance) {
+            canvas.chartInstance.destroy();
+        }
+
+        const history = testHistory[currentSubject];
+        
+        const labels = history.map((test, index) => `Lần ${index + 1}`);
+        const scores = history.map(test => Math.min(Math.max(parseFloat(test.score) || 0, 0), 10));
+        const dates = history.map(test => new Date(test.date).toLocaleDateString());
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(58, 123, 213, 0.8)');
+        gradient.addColorStop(1, 'rgba(0, 210, 255, 0.2)');
+
+        canvas.chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Điểm số',
+                    data: scores,
+                    backgroundColor: gradient,
+                    borderColor: 'rgba(58, 123, 213, 1)',
+                    borderWidth: 3,
+                    tension: 0.3,
+                    fill: true,
+                    pointBackgroundColor: 'white',
+                    pointBorderColor: 'rgba(58, 123, 213, 1)',
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
             },
-            scales: {
-                y: {
-                    min: 0,
-                    max: 10,
-                    ticks: {
-                        stepSize: 1,
-                        font: {
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `Điểm: ${context.raw}/10`;
+                            },
+                            afterLabel: function(context) {
+                                return `Ngày: ${dates[context.dataIndex]}`;
+                            }
+                        },
+                        bodyFont: {
                             size: 14
+                        },
+                        titleFont: {
+                            size: 16
                         }
                     },
                     title: {
                         display: true,
-                        text: 'Điểm số',
+                        text: 'BIỂU ĐỒ TIẾN BỘ',
                         font: {
-                            size: 16
+                            size: 18
+                        },
+                        padding: {
+                            top: 10,
+                            bottom: 20
                         }
                     }
                 },
-                x: {
-                    ticks: {
-                        font: {
-                            size: 14
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 10,
+                        ticks: {
+                            stepSize: 1,
+                            font: {
+                                size: 14
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Điểm số',
+                            font: {
+                                size: 16
+                            }
                         }
                     },
-                    title: {
-                        display: true,
-                        text: 'Lần kiểm tra',
-                        font: {
-                            size: 16
+                    x: {
+                        ticks: {
+                            font: {
+                                size: 14
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Lần kiểm tra',
+                            font: {
+                                size: 16
+                            }
                         }
                     }
                 }
             }
+        });
+    }
+
+    function generateChartComment(chartContainerId) {
+        if (!currentSubject || !testHistory[currentSubject] || testHistory[currentSubject].length < 2) {
+            console.warn("Không đủ dữ liệu để tạo nhận xét hoặc không có môn học được chọn.");
+            return;
         }
-    });
-}
-function generateChartComment(chartContainerId) {
-    if (!currentSubject || !testHistory[currentSubject] || testHistory[currentSubject].length < 2) {
-        console.warn("Không đủ dữ liệu để tạo nhận xét hoặc không có môn học được chọn.");
-        return;
-    }
-    
-    const history = testHistory[currentSubject];
-    const lastScore = history[history.length - 1].score;
-    const prevScore = history[history.length - 2].score;
-    const highestScore = Math.max(...history.map(test => test.score));
-    const averageScore = history.reduce((sum, test) => sum + test.score, 0) / history.length;
-    
-    let comment = "";
-    
-    if (lastScore > prevScore) {
-        comment = `Xuất sắc! Bạn đã cải thiện được ${(lastScore - prevScore).toFixed(1)} điểm so với lần trước. `;
-        if (lastScore === highestScore) {
-            comment += `Đây cũng là điểm số cao nhất của bạn!`;
-        }
-    } else if (lastScore === prevScore) {
-        comment = `Bạn giữ vững phong độ với ${lastScore.toFixed(1)} điểm. `;
-    } else {
-        comment = `Lần này bạn làm kém hơn ${(prevScore - lastScore).toFixed(1)} điểm so với lần trước. `;
-    }
-    
-    comment += ` Điểm trung bình của bạn là ${averageScore.toFixed(1)}/10.`;
-    
-    const commentHTML = `<div id="testChartComment" style="margin-top: 10px; padding: 10px; background-color: #f5f5f5; border-radius: 5px;">${comment}</div>`;
-    
-    const container = document.getElementById(chartContainerId);
-    if (container) {
-        const oldComment = container.querySelector('#testChartComment');
-        if (oldComment) {
-            oldComment.remove();
-        }
-        container.insertAdjacentHTML('beforeend', commentHTML);
-        console.log("Nhận xét đã được thêm vào container:", chartContainerId);
-    } else {
-        console.error("Không tìm thấy container với ID:", chartContainerId);
-    }
-}
-function showTestDetails(subject, index) {
-    const test = testHistory[subject][index];
-    if (!test) return;
-    
-    const date = new Date(test.date).toLocaleString();
-    const scoreClass = test.score >= 8 ? "correct-answer" : test.score >= 5 ? "" : "wrong-answer";
-    
-    let detailsHTML = `<div class="test-result">
-        <div class="test-header">CHI TIẾT BÀI KIỂM TRA</div>
-        <div style="margin-bottom: 10px;">
-            <strong>Ngày thi:</strong> ${date}<br>
-            <strong>Chủ đề:</strong> ${test.topic}<br>
-            <strong>Điểm số:</strong> <span class="${scoreClass}">${test.score}/10</span>
-        </div>
-        <div class="question-box">
-            <div class="question-box-title"><i class="fas fa-clipboard-list"></i> Nhận xét</div>
-            ${test.comment.replace(/\n/g, '<br>')}
-        </div>`;
-    
-    detailsHTML += `<div style="text-align: center; margin-top: 15px;">
-        <button onclick="this.parentElement.parentElement.style.display='none'" 
-                style="padding: 5px 15px; background: #3a7bd5; color: white; border: none; border-radius: 5px; cursor: pointer;">
-            Đóng
-        </button>
-    </div>`;
-    
-    detailsHTML += `</div>`;
-    
-    themTinNhanVaoGiaoDien("bot", detailsHTML);
-    addToChatHistory("bot", detailsHTML, subject);
-
-}
-function showTestHistory() {
-    if (!currentSubject) return;
-
-    const history = testHistory[currentSubject] || [];
-    if (history.length === 0) {
-        const message = "Bạn chưa có bài kiểm tra nào trong lịch sử.";
-        themTinNhanVaoGiaoDien("bot", message);
-        addToChatHistory("bot", message, currentSubject);
-        return;
-    }
-
-    let historyHTML = `<div class="knowledge-box">
-        <div class="knowledge-box-title"><i class="fas fa-history"></i> Lịch sử bài kiểm tra</div>
-        <div style="overflow-x: auto;">
-            <table class="test-history-table">
-                <thead>
-                    <tr>
-                        <th>Ngày</th>
-                        <th>Chủ đề</th>
-                        <th style="text-align: center;">Điểm</th>
-                        <th>Tiến bộ</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-    history.forEach((test, index) => {
-        const date = new Date(test.date).toLocaleDateString();
-        const scoreClass = test.score >= 8 ? "correct-answer" : test.score >= 5 ? "" : "wrong-answer";
-        let improvementBadge = '';
-        if (index > 0) {
-            const prevScore = history[index - 1].score;
-            const improvement = ((test.score - prevScore) / prevScore * 100).toFixed(1);
-            if (improvement > 0) {
-                improvementBadge = `<span style="color: #10b981; font-weight: bold;">↑ ${improvement}%</span>`;
-            } else if (improvement < 0) {
-                improvementBadge = `<span style="color: #ef4444; font-weight: bold;">↓ ${Math.abs(improvement)}%</span>`;
-            } else {
-                improvementBadge = `<span style="color: #6b7280;">→ 0%</span>`;
+        
+        const history = testHistory[currentSubject];
+        const lastScore = history[history.length - 1].score;
+        const prevScore = history[history.length - 2].score;
+        const highestScore = Math.max(...history.map(test => test.score));
+        const averageScore = history.reduce((sum, test) => sum + test.score, 0) / history.length;
+        
+        let comment = "";
+        
+        if (lastScore > prevScore) {
+            comment = `Xuất sắc! Bạn đã cải thiện được ${(lastScore - prevScore).toFixed(1)} điểm so với lần trước. `;
+            if (lastScore === highestScore) {
+                comment += `Đây cũng là điểm số cao nhất của bạn!`;
             }
+        } else if (lastScore === prevScore) {
+            comment = `Bạn giữ vững phong độ với ${lastScore.toFixed(1)} điểm. `;
+        } else {
+            comment = `Lần này bạn làm kém hơn ${(prevScore - lastScore).toFixed(1)} điểm so với lần trước. `;
         }
-        historyHTML += `
-            <tr onclick="showTestDetails('${currentSubject}', ${index})">
-                <td>${date}</td>
-                <td>${test.topic}</td>
-                <td style="text-align: center;" class="${scoreClass}">${test.score}/10</td>
-                <td>${improvementBadge}</td>
-            </tr>`;
-    });
-
-    historyHTML += `</tbody></table></div>`;
-
-    const chartContainerId = 'chart-container-' + new Date().getTime();
-    historyHTML += `<div id="${chartContainerId}" class="chart-container"></div>`;
-
-    themTinNhanVaoGiaoDien("bot", historyHTML);
-    addToChatHistory("bot", historyHTML, currentSubject);
-
-    setTimeout(() => {
+        
+        comment += ` Điểm trung bình của bạn là ${averageScore.toFixed(1)}/10.`;
+        
+        const commentHTML = `<div id="testChartComment" style="margin-top: 10px; padding: 10px; background-color: #f5f5f5; border-radius: 5px;">${comment}</div>`;
+        
         const container = document.getElementById(chartContainerId);
         if (container) {
-            drawTestHistoryChart(container);
-            generateChartComment(chartContainerId);
+            const oldComment = container.querySelector('#testChartComment');
+            if (oldComment) {
+                oldComment.remove();
+            }
+            container.insertAdjacentHTML('beforeend', commentHTML);
+            console.log("Nhận xét đã được thêm vào container:", chartContainerId);
         } else {
             console.error("Không tìm thấy container với ID:", chartContainerId);
         }
-    }, 200);
-}
-function loadTestHistory() {
-    const savedHistory = localStorage.getItem('testHistory');
-    if (savedHistory) {
-        testHistory = JSON.parse(savedHistory);
-        ['toan-hoc', 'vat-ly', 'hoa-hoc'].forEach(subject => {
-            if (testHistory[subject] && testHistory[subject].length > 10) {
-                testHistory[subject] = testHistory[subject].slice(-10);
+    }
+
+    function showTestDetails(subject, index) {
+        const test = testHistory[subject][index];
+        if (!test) return;
+        
+        const date = new Date(test.date).toLocaleString();
+        const scoreClass = test.score >= 8 ? "correct-answer" : test.score >= 5 ? "" : "wrong-answer";
+        
+        let detailsHTML = `<div class="test-result">
+            <div class="test-header">CHI TIẾT BÀI KIỂM TRA</div>
+            <div style="margin-bottom: 10px;">
+                <strong>Ngày thi:</strong> ${date}<br>
+                <strong>Chủ đề:</strong> ${test.topic}<br>
+                <strong>Điểm số:</strong> <span class="${scoreClass}">${test.score}/10</span>
+            </div>
+            <div class="question-box">
+                <div class="question-box-title"><i class="fas fa-clipboard-list"></i> Nhận xét</div>
+                ${test.comment.replace(/\n/g, '<br>')}
+            </div>`;
+        
+        detailsHTML += `<div style="text-align: center; margin-top: 15px;">
+            <button onclick="this.parentElement.parentElement.style.display='none'" 
+                    style="padding: 5px 15px; background: #3a7bd5; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                Đóng
+            </button>
+        </div>`;
+        
+        detailsHTML += `</div>`;
+        
+        themTinNhanVaoGiaoDien("bot", detailsHTML);
+        addToChatHistory("bot", detailsHTML, subject);
+    }
+
+    function showTestHistory() {
+        if (!currentSubject) return;
+
+        const history = testHistory[currentSubject] || [];
+        if (history.length === 0) {
+            const message = "Bạn chưa có bài kiểm tra nào trong lịch sử.";
+            themTinNhanVaoGiaoDien("bot", message);
+            addToChatHistory("bot", message, currentSubject);
+            return;
+        }
+
+        let historyHTML = `<div class="knowledge-box">
+            <div class="knowledge-box-title"><i class="fas fa-history"></i> Lịch sử bài kiểm tra</div>
+            <div style="overflow-x: auto;">
+                <table class="test-history-table">
+                    <thead>
+                        <tr>
+                            <th>Ngày</th>
+                            <th>Chủ đề</th>
+                            <th style="text-align: center;">Điểm</th>
+                            <th>Tiến bộ</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+        history.forEach((test, index) => {
+            const date = new Date(test.date).toLocaleDateString();
+            const scoreClass = test.score >= 8 ? "correct-answer" : test.score >= 5 ? "" : "wrong-answer";
+            let improvementBadge = '';
+            if (index > 0) {
+                const prevScore = history[index - 1].score;
+                const improvement = ((test.score - prevScore) / prevScore * 100).toFixed(1);
+                if (improvement > 0) {
+                    improvementBadge = `<span style="color: #10b981; font-weight: bold;">↑ ${improvement}%</span>`;
+                } else if (improvement < 0) {
+                    improvementBadge = `<span style="color: #ef4444; font-weight: bold;">↓ ${Math.abs(improvement)}%</span>`;
+                } else {
+                    improvementBadge = `<span style="color: #6b7280;">→ 0%</span>`;
+                }
+            }
+            historyHTML += `
+                <tr onclick="showTestDetails('${currentSubject}', ${index})">
+                    <td>${date}</td>
+                    <td>${test.topic}</td>
+                    <td style="text-align: center;" class="${scoreClass}">${test.score}/10</td>
+                    <td>${improvementBadge}</td>
+                </tr>`;
+        });
+
+        historyHTML += `</tbody></table></div>`;
+
+        const chartContainerId = 'chart-container-' + new Date().getTime();
+        historyHTML += `<div id="${chartContainerId}" class="chart-container"></div>`;
+
+        themTinNhanVaoGiaoDien("bot", historyHTML);
+        addToChatHistory("bot", historyHTML, currentSubject);
+
+        setTimeout(() => {
+            const container = document.getElementById(chartContainerId);
+            if (container) {
+                drawTestHistoryChart(container);
+                generateChartComment(chartContainerId);
+            } else {
+                console.error("Không tìm thấy container với ID:", chartContainerId);
+            }
+        }, 200);
+    }
+
+    function loadTestHistory() {
+        const savedHistory = localStorage.getItem('testHistory');
+        if (savedHistory) {
+            testHistory = JSON.parse(savedHistory);
+            ['toan-hoc', 'vat-ly', 'hoa-hoc'].forEach(subject => {
+                if (testHistory[subject] && testHistory[subject].length > 10) {
+                    testHistory[subject] = testHistory[subject].slice(-10);
+                }
+            });
+        } else {
+            testHistory = {
+                'toan-hoc': [],
+                'vat-ly': [],
+                'hoa-hoc': []
+            };
+        }
+        saveTestHistory();
+    }
+
+    function saveTestHistory() {
+        localStorage.setItem('testHistory', JSON.stringify(testHistory));
+    }
+
+    loadTestHistory();
+
+    function backToSubjects() {
+        currentSubject = '';
+        subjectScreen.style.display = 'flex';
+        chatbotContainer.style.display = 'none';
+    }
+
+    function initApp() {
+        subjectButtons.forEach(button => {
+            button.addEventListener('click', () => selectSubject(button.dataset.subject));
+        });
+
+        nutGui.addEventListener('click', guiTinNhan);
+        
+        backButton.addEventListener('click', backToSubjects);
+        
+        oNhapTinNhan.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                guiTinNhan();
             }
         });
-    } else {
-        testHistory = {
-            'toan-hoc': [],
-            'vat-ly': [],
-            'hoa-hoc': []
-        };
+
+        oNhapTinNhan.addEventListener('input', adjustTextareaHeight);
+
+        progressToggle.addEventListener('click', toggleProgressPanel);
+        closeProgress.addEventListener('click', toggleProgressPanel);
+
+        reminderToggle.addEventListener('click', toggleReminderPanel);
+        closeReminder.addEventListener('click', toggleReminderPanel);
+
+        loadChatHistory();
+        loadUserProgress();
+        loadWeaknessAreas();
+        loadLastReminderDate();
+
+        checkWeeklyReminders();
+
+        document.getElementById('historyButton').addEventListener('click', showTestHistory);
     }
-    saveTestHistory();
-}
 
-function saveTestHistory() {
-    localStorage.setItem('testHistory', JSON.stringify(testHistory));
-}
-
-loadTestHistory();
-
-function backToSubjects() {
-    currentSubject = '';
-    subjectScreen.style.display = 'flex';
-    chatbotContainer.style.display = 'none';
-}
-
-function initApp() {
-    subjectButtons.forEach(button => {
-        button.addEventListener('click', () => selectSubject(button.dataset.subject));
-    });
-
-    nutGui.addEventListener('click', guiTinNhan);
-    
-    backButton.addEventListener('click', backToSubjects);
-    
-    oNhapTinNhan.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            guiTinNhan();
+    function toggleProgressPanel() {
+        if (progressContainer.style.display === 'block') {
+            progressContainer.style.display = 'none';
+        } else {
+            progressContainer.style.display = 'block';
+            updateProgressDisplay();
         }
-    });
-
-    oNhapTinNhan.addEventListener('input', adjustTextareaHeight);
-
-
-    progressToggle.addEventListener('click', toggleProgressPanel);
-    closeProgress.addEventListener('click', toggleProgressPanel);
-
-    reminderToggle.addEventListener('click', toggleReminderPanel);
-    closeReminder.addEventListener('click', toggleReminderPanel);
-
-    loadChatHistory();
-    loadUserProgress();
-    loadWeaknessAreas();
-    loadLastReminderDate();
-
-    checkWeeklyReminders();
-
-    document.getElementById('historyButton').addEventListener('click', showTestHistory);
-}
-
-function toggleProgressPanel() {
-    if (progressContainer.style.display === 'block') {
-        progressContainer.style.display = 'none';
-    } else {
-        progressContainer.style.display = 'block';
-        updateProgressDisplay();
-    }
-}
-
-function toggleReminderPanel() {
-    if (reminderContainer.style.display === 'block') {
-        reminderContainer.style.display = 'none';
-    } else {
-        reminderContainer.style.display = 'block';
-        updateReminderDisplay();
-    }
-}
-
-function updateProgressDisplay() {
-    if (!currentSubject) {
-        progressContent.innerHTML = '<div class="progress-item">Vui lòng chọn môn học để xem tiến độ</div>';
-        return;
     }
 
-    const subjectName = 
-        currentSubject === 'toan-hoc' ? 'Toán Học' : 
-        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    const totalExercises = userProgress[currentSubject]?.totalExercises || 0;
-    const completedExercises = userProgress[currentSubject]?.completedExercises || 0;
-    const completionRate = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
-
-    let html = `<div class="progress-item">
-        <div class="progress-topic">Môn học: <span>${subjectName}</span></div>
-        <div class="progress-stats">Tổng số bài đã làm: ${totalExercises}</div>
-        <div class="progress-stats">Tổng số bài đã hoàn thành: ${completedExercises}</div>
-        <div class="progress-topic">
-            <span>Tiến độ hoàn thành</span>
-            <span>${completionRate}%</span>
-        </div>
-        <div class="progress-bar-container">
-            <div class="progress-bar" style="width: ${completionRate}%"></div>
-        </div>
-        <div class="progress-stats">${completedExercises}/${totalExercises} bài đã hoàn thành</div>
-    </div>`;
-
-    progressContent.innerHTML = html;
-}
-
-function updateReminderDisplay() {
-    if (!currentSubject) {
-        reminderContent.innerHTML = '<div class="reminder-item">Vui lòng chọn môn học để xem gợi ý</div>';
-        return;
+    function toggleReminderPanel() {
+        if (reminderContainer.style.display === 'block') {
+            reminderContainer.style.display = 'none';
+        } else {
+            reminderContainer.style.display = 'block';
+            updateReminderDisplay();
+        }
     }
 
-    const subjectName = 
-        currentSubject === 'toan-hoc' ? 'Toán Học' : 
-        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    let html = `<div class="reminder-item">
-        <div class="reminder-topic">Môn học: ${subjectName}</div>
-    </div>`;
+    function updateProgressDisplay() {
+        if (!currentSubject) {
+            progressContent.innerHTML = '<div class="progress-item">Vui lòng chọn môn học để xem tiến độ</div>';
+            return;
+        }
 
-    if (weaknessAreas[currentSubject]) {
-        Object.entries(weaknessAreas[currentSubject]).forEach(([topic, exercises]) => {
-            html += `
-                <div class="reminder-item">
-                    <div class="reminder-topic">Ôn tập: ${topic}</div>
-                    <div class="reminder-exercise">${exercises.join('<br>')}</div>
-                </div>
-            `;
-        });
-    }
-
-    reminderContent.innerHTML = html;
-}
-
-function checkWeeklyReminders() {
-    const now = new Date();
-    const oneWeek = 7 * 24 * 60 * 60 * 1000;
-    
-    if (!lastReminderDate || (now - new Date(lastReminderDate)) >= oneWeek) {
-        generateWeeklyReminders();
-        lastReminderDate = now.toISOString();
-        saveLastReminderDate();
+        const subjectName = 
+            currentSubject === 'toan-hoc' ? 'Toán Học' : 
+            currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
         
-        setTimeout(() => {
-            const reminderMessage = `Bạn ơi, mình đã phân tích điểm yếu và gợi ý bài tập cho tuần này. Nhấn vào biểu tượng chuông để xem nhé!`;
-            
-            themTinNhanVaoGiaoDien("bot", reminderMessage);
-            addToChatHistory("bot", reminderMessage, currentSubject);
-        }, 3000);
+        const totalExercises = userProgress[currentSubject]?.totalExercises || 0;
+        const completedExercises = userProgress[currentSubject]?.completedExercises || 0;
+        const completionRate = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
+
+        let html = `<div class="progress-item">
+            <div class="progress-topic">Môn học: <span>${subjectName}</span></div>
+            <div class="progress-stats">Tổng số bài đã làm: ${totalExercises}</div>
+            <div class="progress-stats">Tổng số bài đã hoàn thành: ${completedExercises}</div>
+            <div class="progress-topic">
+                <span>Tiến độ hoàn thành</span>
+                <span>${completionRate}%</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" style="width: ${completionRate}%"></div>
+            </div>
+            <div class="progress-stats">${completedExercises}/${totalExercises} bài đã hoàn thành</div>
+        </div>`;
+
+        progressContent.innerHTML = html;
     }
-}
 
-async function generateWeeklyReminders() {
-    if (!currentSubject) return;
+    function updateReminderDisplay() {
+        if (!currentSubject) {
+            reminderContent.innerHTML = '<div class="reminder-item">Vui lòng chọn môn học để xem gợi ý</div>';
+            return;
+        }
 
-    const subjectName = 
-        currentSubject === 'toan-hoc' ? 'Toán Học' : 
-        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    const prompt = `Bạn là một học sinh giỏi ${subjectName} THPT. Dựa trên các bài tập mà bạn học đã gặp khó khăn, hãy:
-    
+        const subjectName = 
+            currentSubject === 'toan-hoc' ? 'Toán Học' : 
+            currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        let html = `<div class="reminder-item">
+            <div class="reminder-topic">Môn học: ${subjectName}</div>
+        </div>`;
+
+        if (weaknessAreas[currentSubject]) {
+            Object.entries(weaknessAreas[currentSubject]).forEach(([topic, exercises]) => {
+                html += `
+                    <div class="reminder-item">
+                        <div class="reminder-topic">Ôn tập: ${topic}</div>
+                        <div class="reminder-exercise">${exercises.join('<br>')}</div>
+                    </div>
+                `;
+            });
+        }
+
+        reminderContent.innerHTML = html;
+    }
+
+    function checkWeeklyReminders() {
+        const now = new Date();
+        const oneWeek = 7 * 24 * 60 * 60 * 1000;
+        
+        if (!lastReminderDate || (now - new Date(lastReminderDate)) >= oneWeek) {
+            generateWeeklyReminders();
+            lastReminderDate = now.toISOString();
+            saveLastReminderDate();
+            
+            setTimeout(() => {
+                const reminderMessage = `Bạn ơi, mình đã phân tích điểm yếu và gợi ý bài tập cho tuần này. Nhấn vào biểu tượng chuông để xem nhé!`;
+                
+                themTinNhanVaoGiaoDien("bot", reminderMessage);
+                addToChatHistory("bot", reminderMessage, currentSubject);
+            }, 3000);
+        }
+    }
+
+    async function generateWeeklyReminders() {
+        if (!currentSubject) return;
+
+        const subjectName = 
+            currentSubject === 'toan-hoc' ? 'Toán Học' : 
+            currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        const prompt = `Bạn là một học sinh giỏi ${subjectName} THPT. Dựa trên các bài tập mà bạn học đã gặp khó khăn, hãy:
+        
 1. Xác định 3 chủ đề mà bạn học cần ôn tập nhiều nhất
 2. Gợi ý 2 bài tập cho mỗi chủ đề để luyện tập trong tuần này
 
@@ -1564,243 +1612,251 @@ Kết quả phân tích:
 - Bài tập 1: 
 - Bài tập 2: `;
 
-    try {
-        const ketQua = await moHinh.generateContent(prompt);
-        const phanHoi = await ketQua.response;
-        const reminders = phanHoi.text();
-        
-        updateWeaknessFromReminders(reminders);
-        
-        saveWeaknessAreas();
-        updateReminderDisplay();
-        
-    } catch (error) {
-        console.error("Lỗi khi tạo gợi ý tuần:", error);
-    }
-}
-
-function updateWeaknessFromReminders(remindersText) {
-    if (!currentSubject) return;
-    
-    if (!weaknessAreas[currentSubject]) {
-        weaknessAreas[currentSubject] = {};
-    }
-    
-    const lines = remindersText.split('\n');
-    let currentTopic = '';
-    
-    for (const line of lines) {
-        if (line.startsWith('Chủ đề')) {
-            const topicMatch = line.match(/Chủ đề \d+: (.+)/);
-            if (topicMatch && topicMatch[1]) {
-                currentTopic = topicMatch[1].trim();
-                weaknessAreas[currentSubject][currentTopic] = [];
-            }
-        } else if (line.startsWith('- Bài tập') && currentTopic) {
-            const exercise = line.replace(/^- Bài tập \d+: /, '').trim();
-            if (exercise) {
-                weaknessAreas[currentSubject][currentTopic].push(exercise);
-            }
-        }
-    }
-}
-
-
-function adjustTextareaHeight() {
-    oNhapTinNhan.style.height = 'auto';
-    oNhapTinNhan.style.height = (oNhapTinNhan.scrollHeight) + 'px';
-}
-
-function scrollToBottom() {
-    khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
-}
-
-function themTinNhanVaoGiaoDien(nguoiGui, vanBan) {
-    const divTinNhan = document.createElement('div');
-    divTinNhan.classList.add('tin-nhan', `tin-nhan-${nguoiGui}`);
-
-    const lastMessage = chatHistory.slice(-1)[0];
-    const messageTime = lastMessage && lastMessage.timestamp 
-        ? new Date(lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    divTinNhan.innerHTML = vanBan + `<div class="message-time">${messageTime}</div>`;
-    khungTroChuyen.appendChild(divTinNhan);
-    scrollToBottom();
-}
-
-function addToChatHistory(nguoiGui, vanBan, subject) {
-    const timestamp = new Date().toISOString();
-    chatHistory.push({
-        sender: nguoiGui,
-        message: vanBan,
-        subject: subject,
-        timestamp: timestamp
-    });
-    
-    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-}
-
-function loadChatHistory() {
-    const savedHistory = localStorage.getItem('chatHistory');
-    if (savedHistory) {
-        chatHistory = JSON.parse(savedHistory);
-    }
-}
-
-function loadUserProgress() {
-    const savedProgress = localStorage.getItem('userProgress');
-    if (savedProgress) {
-        userProgress = JSON.parse(savedProgress);
-    } else {
-        userProgress = {
-            'toan-hoc': { 
-                totalExercises: 0, 
-                completedExercises: 0,
-                topics: {} 
-            },
-            'vat-ly': { 
-                totalExercises: 0, 
-                completedExercises: 0,
-                topics: {} 
-            },
-            'hoa-hoc': { 
-                totalExercises: 0,
-                completedExercises: 0,
-                topics: {} 
-            }
-        };
-    }
-}
-
-function loadWeaknessAreas() {
-    const savedWeakness = localStorage.getItem('weaknessAreas');
-    if (savedWeakness) {
-        weaknessAreas = JSON.parse(savedWeakness);
-    } else {
-        weaknessAreas = {
-            'toan-hoc': {},
-            'vat-ly': {},
-            'hoa-hoc': {}
-        };
-    }
-}
-
-function loadLastReminderDate() {
-    const savedDate = localStorage.getItem('lastReminderDate');
-    if (savedDate) {
-        lastReminderDate = savedDate;
-    }
-}
-
-function saveUserProgress() {
-    localStorage.setItem('userProgress', JSON.stringify(userProgress));
-}
-
-function saveWeaknessAreas() {
-    localStorage.setItem('weaknessAreas', JSON.stringify(weaknessAreas));
-}
-
-function saveLastReminderDate() {
-    localStorage.setItem('lastReminderDate', lastReminderDate);
-}
-
-function updateUserProgress(topic, isCompleted) {
-    if (!currentSubject) return;
-    
-    if (!userProgress[currentSubject]) {
-        userProgress[currentSubject] = { 
-            totalExercises: 0, 
-            completedExercises: 0,
-            topics: {},
-            lastProblem: null
-        };
-    }
-    
-    if (!userProgress[currentSubject].topics[topic]) {
-        userProgress[currentSubject].topics[topic] = {
-            total: 0,
-            completed: 0,
-            mistakes: 0
-        };
-    }
-    
-    const topicStats = userProgress[currentSubject].topics[topic];
-    
-    if (isCompleted === undefined) {
-        if (userProgress[currentSubject].lastProblem !== currentProblem.question) {
-            userProgress[currentSubject].totalExercises += 1;
-            topicStats.total += 1;
-            userProgress[currentSubject].lastProblem = currentProblem.question;
-        }
-    }
-    else if (isCompleted === true) {
-        if (!currentProblem.countedAsCompleted) {
-            userProgress[currentSubject].completedExercises += 1;
-            topicStats.completed += 1;
-            currentProblem.countedAsCompleted = true;
-        }
-    }
-    else if (isCompleted === false) {
-        topicStats.mistakes += 1;
-        
-        const mistakeRate = topicStats.mistakes / topicStats.total;
-        if (mistakeRate > 0.5 && !weaknessAreas[currentSubject][topic]) {
-            weaknessAreas[currentSubject][topic] = [];
+        try {
+            const moHinhSubject = getAIModel(currentSubject);
+            const ketQua = await moHinhSubject.generateContent(prompt);
+            const phanHoi = await ketQua.response;
+            const reminders = phanHoi.text();
+            
+            updateWeaknessFromReminders(reminders);
+            
             saveWeaknessAreas();
+            updateReminderDisplay();
+            
+        } catch (error) {
+            console.error("Lỗi khi tạo gợi ý tuần:", error);
         }
     }
-    
-    saveUserProgress();
-    updateProgressDisplay();
-}
 
-function loadSubjectChatHistory(subject) {
-    khungTroChuyen.innerHTML = '';
-    
-    const subjectMessages = chatHistory.filter(msg => msg.subject === subject);
-    
-    subjectMessages.forEach(msg => {
+    function updateWeaknessFromReminders(remindersText) {
+        if (!currentSubject) return;
+        
+        if (!weaknessAreas[currentSubject]) {
+            weaknessAreas[currentSubject] = {};
+        }
+        
+        const lines = remindersText.split('\n');
+        let currentTopic = '';
+        
+        for (const line of lines) {
+            if (line.startsWith('Chủ đề')) {
+                const topicMatch = line.match(/Chủ đề \d+: (.+)/);
+                if (topicMatch && topicMatch[1]) {
+                    currentTopic = topicMatch[1].trim();
+                    weaknessAreas[currentSubject][currentTopic] = [];
+                }
+            } else if (line.startsWith('- Bài tập') && currentTopic) {
+                const exercise = line.replace(/^- Bài tập \d+: /, '').trim();
+                if (exercise) {
+                    weaknessAreas[currentSubject][currentTopic].push(exercise);
+                }
+            }
+        }
+    }
+
+    function adjustTextareaHeight() {
+        oNhapTinNhan.style.height = 'auto';
+        oNhapTinNhan.style.height = (oNhapTinNhan.scrollHeight) + 'px';
+    }
+
+    function scrollToBottom() {
+        khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
+    }
+
+    function themTinNhanVaoGiaoDien(nguoiGui, vanBan) {
         const divTinNhan = document.createElement('div');
-        divTinNhan.classList.add('tin-nhan', `tin-nhan-${msg.sender}`);
-        
-        const messageTime = msg.timestamp 
-            ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        divTinNhan.innerHTML = msg.message + `<div class="message-time">${messageTime}</div>`;
-        khungTroChuyen.appendChild(divTinNhan);
-    });
-    
-    setTimeout(scrollToBottom, 100);
+        divTinNhan.classList.add('tin-nhan', `tin-nhan-${nguoiGui}`);
 
-    if (subjectMessages.length === 0) {
+        const lastMessage = chatHistory.slice(-1)[0];
+        const messageTime = lastMessage && lastMessage.timestamp 
+            ? new Date(lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        divTinNhan.innerHTML = vanBan + `<div class="message-time">${messageTime}</div>`;
+        khungTroChuyen.appendChild(divTinNhan);
+        scrollToBottom();
+    }
+
+    function addToChatHistory(nguoiGui, vanBan, subject) {
+        const timestamp = new Date().toISOString();
+        chatHistory.push({
+            sender: nguoiGui,
+            message: vanBan,
+            subject: subject,
+            timestamp: timestamp
+        });
+        
+        localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    }
+
+    function loadChatHistory() {
+        const savedHistory = localStorage.getItem('chatHistory');
+        if (savedHistory) {
+            chatHistory = JSON.parse(savedHistory);
+        }
+    }
+
+    function loadUserProgress() {
+        const savedProgress = localStorage.getItem('userProgress');
+        if (savedProgress) {
+            userProgress = JSON.parse(savedProgress);
+        } else {
+            userProgress = {
+                'toan-hoc': { 
+                    totalExercises: 0, 
+                    completedExercises: 0,
+                    topics: {} 
+                },
+                'vat-ly': { 
+                    totalExercises: 0, 
+                    completedExercises: 0,
+                    topics: {} 
+                },
+                'hoa-hoc': { 
+                    totalExercises: 0,
+                    completedExercises: 0,
+                    topics: {} 
+                }
+            };
+        }
+    }
+
+    function loadWeaknessAreas() {
+        const savedWeakness = localStorage.getItem('weaknessAreas');
+        if (savedWeakness) {
+            weaknessAreas = JSON.parse(savedWeakness);
+        } else {
+            weaknessAreas = {
+                'toan-hoc': {},
+                'vat-ly': {},
+                'hoa-hoc': {}
+            };
+        }
+    }
+
+    function loadLastReminderDate() {
+        const savedDate = localStorage.getItem('lastReminderDate');
+        if (savedDate) {
+            lastReminderDate = savedDate;
+        }
+    }
+
+    function saveUserProgress() {
+        localStorage.setItem('userProgress', JSON.stringify(userProgress));
+    }
+
+    function saveWeaknessAreas() {
+        localStorage.setItem('weaknessAreas', JSON.stringify(weaknessAreas));
+    }
+
+    function saveLastReminderDate() {
+        localStorage.setItem('lastReminderDate', lastReminderDate);
+    }
+
+    function updateUserProgress(topic, isCompleted) {
+        if (!currentSubject) return;
+        
+        if (!userProgress[currentSubject]) {
+            userProgress[currentSubject] = { 
+                totalExercises: 0, 
+                completedExercises: 0,
+                topics: {},
+                lastProblem: null
+            };
+        }
+        
+        if (!userProgress[currentSubject].topics[topic]) {
+            userProgress[currentSubject].topics[topic] = {
+                total: 0,
+                completed: 0,
+                mistakes: 0
+            };
+        }
+        
+        const topicStats = userProgress[currentSubject].topics[topic];
+        const currentState = getCurrentSubjectState();
+        
+        if (isCompleted === undefined) {
+            if (userProgress[currentSubject].lastProblem !== currentState.currentProblem?.question) {
+                userProgress[currentSubject].totalExercises += 1;
+                topicStats.total += 1;
+                userProgress[currentSubject].lastProblem = currentState.currentProblem?.question;
+            }
+        }
+        else if (isCompleted === true) {
+            if (!currentState.currentProblem?.countedAsCompleted) {
+                userProgress[currentSubject].completedExercises += 1;
+                topicStats.completed += 1;
+                if (currentState.currentProblem) {
+                    updateCurrentSubjectState({
+                        currentProblem: {
+                            ...currentState.currentProblem,
+                            countedAsCompleted: true
+                        }
+                    });
+                }
+            }
+        }
+        else if (isCompleted === false) {
+            topicStats.mistakes += 1;
+            
+            const mistakeRate = topicStats.mistakes / topicStats.total;
+            if (mistakeRate > 0.5 && !weaknessAreas[currentSubject][topic]) {
+                weaknessAreas[currentSubject][topic] = [];
+                saveWeaknessAreas();
+            }
+        }
+        
+        saveUserProgress();
+        updateProgressDisplay();
+    }
+
+    function loadSubjectChatHistory(subject) {
+        khungTroChuyen.innerHTML = '';
+        
+        const subjectMessages = chatHistory.filter(msg => msg.subject === subject);
+        
+        subjectMessages.forEach(msg => {
+            const divTinNhan = document.createElement('div');
+            divTinNhan.classList.add('tin-nhan', `tin-nhan-${msg.sender}`);
+            
+            const messageTime = msg.timestamp 
+                ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            divTinNhan.innerHTML = msg.message + `<div class="message-time">${messageTime}</div>`;
+            khungTroChuyen.appendChild(divTinNhan);
+        });
+        
+        setTimeout(scrollToBottom, 100);
+
+        if (subjectMessages.length === 0) {
+            const subjectName = 
+                subject === 'toan-hoc' ? 'Toán Học' : 
+                subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+            
+            const welcomeMessage = `TriGuide chào bạn!!! Mình là trợ lý học tập môn ${subjectName}. Mình có thể giúp bạn học tập bằng cách gợi mở tư duy. Bạn có câu hỏi gì về môn học này không?`;
+            
+            themTinNhanVaoGiaoDien("bot", welcomeMessage);
+            addToChatHistory("bot", welcomeMessage, subject);
+        }
+    }
+
+    function generateAnalysisPrompt(question, subject, history) {
         const subjectName = 
             subject === 'toan-hoc' ? 'Toán Học' : 
             subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
         
-        const welcomeMessage = `TriGuide chào bạn!!! Mình là trợ lý học tập môn ${subjectName}. Mình có thể giúp bạn học tập bằng cách gợi mở tư duy. Bạn có câu hỏi gì về môn học này không?`;
+        let context = "Lịch sử trò chuyện gần đây:\n";
+        if (history && history.length > 0) {
+            context += history.slice(-3).map(msg => 
+                `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
+            ).join('\n');
+        } else {
+            context += "Chưa có lịch sử trò chuyện";
+        }
         
-        themTinNhanVaoGiaoDien("bot", welcomeMessage);
-        addToChatHistory("bot", welcomeMessage, subject);
-    }
-}
-
-function generateAnalysisPrompt(question, subject, history) {
-    const subjectName = 
-        subject === 'toan-hoc' ? 'Toán Học' : 
-        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    let context = "Lịch sử trò chuyện gần đây:\n";
-    if (history && history.length > 0) {
-        context += history.slice(-3).map(msg => 
-            `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
-        ).join('\n');
-    } else {
-        context += "Chưa có lịch sử trò chuyện";
-    }
-    
-    return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy phân tích câu hỏi sau theo yêu cầu:
+        return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy phân tích câu hỏi sau theo yêu cầu:
 
 QUY TẮC BẮT BUỘC:
 1. KHÔNG sử dụng ký tự * trong bất kỳ trường hợp nào
@@ -1846,23 +1902,23 @@ Phân tích:
 5. Bài tập tương tự:
 - 
 - `;
-}
-
-function generateSolutionGuidancePrompt(question, subject, history, analysis) {
-    const subjectName = 
-        subject === 'toan-hoc' ? 'Toán Học' : 
-        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    let context = "Lịch sử trò chuyện gần đây:\n";
-    if (history && history.length > 0) {
-        context += history.slice(-3).map(msg => 
-            `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
-        ).join('\n');
-    } else {
-        context += "Chưa có lịch sử trò chuyện";
     }
-    
-    return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy HƯỚNG DẪN CÁCH TIẾP CẬN bài tập sau theo yêu cầu:
+
+    function generateSolutionGuidancePrompt(question, subject, history, analysis) {
+        const subjectName = 
+            subject === 'toan-hoc' ? 'Toán Học' : 
+            subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        let context = "Lịch sử trò chuyện gần đây:\n";
+        if (history && history.length > 0) {
+            context += history.slice(-3).map(msg => 
+                `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
+            ).join('\n');
+        } else {
+            context += "Chưa có lịch sử trò chuyện";
+        }
+        
+        return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy HƯỚNG DẪN CÁCH TIẾP CẬN bài tập sau theo yêu cầu:
 
 QUY TẮC BẮT BUỘC:
 1. KHÔNG sử dụng ký tự * trong bất kỳ trường hợp nào
@@ -1885,23 +1941,23 @@ Câu hỏi hiện tại: ${question}
 
 Hướng dẫn tiếp cận:
 1. `;
-}
-
-function generateGeneralPrompt(question, subject, history) {
-    const subjectName = 
-        subject === 'toan-hoc' ? 'Toán Học' : 
-        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    let context = "Lịch sử trò chuyện gần đây:\n";
-    if (history && history.length > 0) {
-        context += history.slice(-3).map(msg => 
-            `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
-        ).join('\n');
-    } else {
-        context += "Chưa có lịch sử trò chuyện";
     }
-    
-    return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy trả lời câu hỏi sau một cách ngắn gọn, dễ hiểu:
+
+    function generateGeneralPrompt(question, subject, history) {
+        const subjectName = 
+            subject === 'toan-hoc' ? 'Toán Học' : 
+            subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        let context = "Lịch sử trò chuyện gần đây:\n";
+        if (history && history.length > 0) {
+            context += history.slice(-3).map(msg => 
+                `${msg.sender === 'nguoi-dung' ? 'Người dùng' : 'Bot'}: ${msg.message}`
+            ).join('\n');
+        } else {
+            context += "Chưa có lịch sử trò chuyện";
+        }
+        
+        return `Bạn là một học sinh giỏi ${subjectName} THPT. Hãy trả lời câu hỏi sau một cách ngắn gọn, dễ hiểu:
 
 QUY TẮC BẮT BUỘC:
 1. KHÔNG sử dụng ký tự * trong bất kỳ trường hợp nào
@@ -1921,15 +1977,15 @@ ${context}
 Câu hỏi hiện tại: ${question}
 
 Trả lời:`;
-}
+    }
 
-function generateSimilarExercisesPrompt(question, subject, guidance) {
-    const subjectName = 
-        subject === 'toan-hoc' ? 'Toán Học' : 
-        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    return `Bạn là một học sinh giỏi ${subjectName} THPT. Vừa rồi bạn đã phân tích bài tập sau:
-    
+    function generateSimilarExercisesPrompt(question, subject, guidance) {
+        const subjectName = 
+            subject === 'toan-hoc' ? 'Toán Học' : 
+            subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        return `Bạn là một học sinh giỏi ${subjectName} THPT. Vừa rồi bạn đã phân tích bài tập sau:
+        
 Bài tập gốc:
 ${question}
 
@@ -1946,15 +2002,15 @@ QUY TẮC:
 
 Bài tập tương tự:
 1. `;
-}
+    }
 
-function generateReviewSuggestionPrompt(topic, subject, mistakes) {
-    const subjectName = 
-        subject === 'toan-hoc' ? 'Toán Học' : 
-        subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-    
-    return `Bạn là một học sinh giỏi ${subjectName} THPT. Bạn đang gặp khó khăn với chủ đề ${topic} (đã mắc ${mistakes} lỗi). Hãy:
-    
+    function generateReviewSuggestionPrompt(topic, subject, mistakes) {
+        const subjectName = 
+            subject === 'toan-hoc' ? 'Toán Học' : 
+            subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+        
+        return `Bạn là một học sinh giỏi ${subjectName} THPT. Bạn đang gặp khó khăn với chủ đề ${topic} (đã mắc ${mistakes} lỗi). Hãy:
+        
 1. Giải thích ngắn gọn những điểm quan trọng cần nhớ về chủ đề này
 2. Gợi ý 1-2 bài tập đơn giản để bạn có thể luyện tập lại
 
@@ -1972,21 +2028,22 @@ Gợi ý ôn tập:
 2. Bài tập luyện lại:
 - 
 - `;
-}
+    }
 
-async function checkStudentAnswer(studentAnswer) {
-    try {
-        if (!currentProblem || !currentProblem.question) {
-            throw new Error("Không tìm thấy bài toán hiện tại");
-        }
+    async function checkStudentAnswer(studentAnswer) {
+        try {
+            const currentState = getCurrentSubjectState();
+            if (!currentState.currentProblem || !currentState.currentProblem.question) {
+                throw new Error("Không tìm thấy bài toán hiện tại");
+            }
 
-        loadingIndicator.style.display = 'block';
-        
-        const prompt = `Bạn là một học sinh giỏi ${currentSubject === 'toan-hoc' ? 'Toán Học' : currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học'} THPT. 
+            loadingIndicator.style.display = 'block';
+            
+            const prompt = `Bạn là một học sinh giỏi ${currentSubject === 'toan-hoc' ? 'Toán Học' : currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học'} THPT. 
 Hãy kiểm tra đáp án sau đây của bạn học với bài toán sau:
 
 Bài toán:
-${currentProblem.question}
+${currentState.currentProblem.question}
 
 Đáp án bạn học đưa ra:
 ${studentAnswer}
@@ -2004,462 +2061,492 @@ YÊU CẦU:
 - Khi sai chỉ chỉ ra lỗi sai và gợi ý
 - Không dùng ký tự *`;
 
-        const ketQua = await moHinh.generateContent(prompt);
-        const phanHoi = await ketQua.response;
-        let traLoiBot = phanHoi.text().trim();
-        
-        loadingIndicator.style.display = 'none';
-        
-        const ketQuaMatch = traLoiBot.match(/\[KẾT_QUẢ\]\s*(ĐÚNG|SAI)/i);
-        const loiSaiMatch = traLoiBot.match(/\[LỖI_SAI\]\s*([\s\S]*?)(\[GỢI_Ý\]|$)/i);
-        const goiYMatch = traLoiBot.match(/\[GỢI_Ý\]\s*([\s\S]*?)(\[BÀI_TẬP_TƯƠNG_TỰ\]|$)/i);
-        const baiTapMatch = traLoiBot.match(/\[BÀI_TẬP_TƯƠNG_TỰ\]\s*([\s\S]*)/i);
-        
-        if (!ketQuaMatch || !loiSaiMatch) {
-            throw new Error("Phản hồi không đúng định dạng");
-        }
-
-        const isCorrect = ketQuaMatch[1].toUpperCase() === "ĐÚNG";
-        const loiSai = loiSaiMatch[1].trim();
-        const goiY = goiYMatch ? goiYMatch[1].trim() : null;
-        const baiTapTuongTu = baiTapMatch ? baiTapMatch[1].trim() : null;
-
-        const topicMatch = currentProblem.analysis.match(/2\. Chủ đề:\s*(.+)/);
-        const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
-        
-        if (isCorrect) {
-            let response = `<div class="exercise-suggestion">
-                <div class="exercise-suggestion-title"><i class="fas fa-check-circle"></i> Chính xác! Bạn làm rất tốt!</div>
-                <div style="margin: 10px 0; padding: 10px; background-color: #e8f5e9; border-radius: 8px;">
-                    <i class="fas fa-medal" style="color: #ffd700; margin-right: 5px;"></i>
-                    Mình rất ấn tượng với cách bạn giải quyết vấn đề này! Bạn đã áp dụng đúng phương pháp và tính toán chính xác.
-                </div>`;
+            const moHinhSubject = getAIModel(currentSubject);
+            const ketQua = await moHinhSubject.generateContent(prompt);
+            const phanHoi = await ketQua.response;
+            let traLoiBot = phanHoi.text().trim();
             
-            if (loiSai) {
-                response += `<div style="margin: 10px 0; padding: 10px; background-color: #e3f2fd; border-radius: 8px;">
-                    ${loiSai.replace(/\n/g, '<br>')}
-                </div>`;
+            loadingIndicator.style.display = 'none';
+            
+            const ketQuaMatch = traLoiBot.match(/\[KẾT_QUẢ\]\s*(ĐÚNG|SAI)/i);
+            const loiSaiMatch = traLoiBot.match(/\[LỖI_SAI\]\s*([\s\S]*?)(\[GỢI_Ý\]|$)/i);
+            const goiYMatch = traLoiBot.match(/\[GỢI_Ý\]\s*([\s\S]*?)(\[BÀI_TẬP_TƯƠNG_TỰ\]|$)/i);
+            const baiTapMatch = traLoiBot.match(/\[BÀI_TẬP_TƯƠNG_TỰ\]\s*([\s\S]*)/i);
+            
+            if (!ketQuaMatch || !loiSaiMatch) {
+                throw new Error("Phản hồi không đúng định dạng");
             }
+
+            const isCorrect = ketQuaMatch[1].toUpperCase() === "ĐÚNG";
+            const loiSai = loiSaiMatch[1].trim();
+            const goiY = goiYMatch ? goiYMatch[1].trim() : null;
+            const baiTapTuongTu = baiTapMatch ? baiTapMatch[1].trim() : null;
+
+            const topicMatch = currentState.currentProblem.analysis.match(/2\. Chủ đề:\s*(.+)/);
+            const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
             
-            if (baiTapTuongTu) {
-                const baiTaps = baiTapTuongTu.split('\n').filter(line => line.trim()).slice(0, 2);
-                response += `<div class="similar-exercise">
-                    <div class="similar-exercise-title"><i class="fas fa-lightbulb"></i> Bài tập tương tự để luyện tập thêm</div>
-                    <ol style="margin-left: 20px;">
-                        ${baiTaps.map(baiTap => `<li>${baiTap.trim()}</li>`).join('')}
-                    </ol>
-                    <div style="margin-top: 10px; font-style: italic;">
-                        Hãy thử sức với các bài tập này để củng cố kiến thức nhé!
-                    </div>
+            if (isCorrect) {
+                let response = `<div class="exercise-suggestion">
+                    <div class="exercise-suggestion-title"><i class="fas fa-check-circle"></i> Chính xác! Bạn làm rất tốt!</div>
+                    <div style="margin: 10px 0; padding: 10px; background-color: #e8f5e9; border-radius: 8px;">
+                        <i class="fas fa-medal" style="color: #ffd700; margin-right: 5px;"></i>
+                        Mình rất ấn tượng với cách bạn giải quyết vấn đề này! Bạn đã áp dụng đúng phương pháp và tính toán chính xác.
+                    </div>`;
+                
+                if (loiSai) {
+                    response += `<div style="margin: 10px 0; padding: 10px; background-color: #e3f2fd; border-radius: 8px;">
+                        ${loiSai.replace(/\n/g, '<br>')}
+                    </div>`;
+                }
+                
+                if (baiTapTuongTu) {
+                    const baiTaps = baiTapTuongTu.split('\n').filter(line => line.trim()).slice(0, 2);
+                    response += `<div class="similar-exercise">
+                        <div class="similar-exercise-title"><i class="fas fa-lightbulb"></i> Bài tập tương tự để luyện tập thêm</div>
+                        <ol style="margin-left: 20px;">
+                            ${baiTaps.map(baiTap => `<li>${baiTap.trim()}</li>`).join('')}
+                        </ol>
+                        <div style="margin-top: 10px; font-style: italic;">
+                            Hãy thử sức với các bài tập này để củng cố kiến thức nhé!
+                        </div>
+                    </div>`;
+                }
+                
+                response += `</div>`;
+                
+                themTinNhanVaoGiaoDien("bot", response);
+                addToChatHistory("bot", response, currentSubject);
+                updateCurrentSubjectState({
+                    currentProblem: {
+                        ...currentState.currentProblem,
+                        solved: true
+                    }
+                });
+                
+                updateUserProgress(topic, true);
+                
+            } else {
+                let response = `<div class="question-box">
+                    <div class="question-box-title"><i class="fas fa-exclamation-circle"></i> Đáp án chưa chính xác</div>
+                    <strong>Lỗi sai:</strong><br>
+                    ${loiSai.replace(/\n/g, '<br>')}<br><br>
+                    <strong>Gợi ý làm lại:</strong><br>
+                    ${goiY ? goiY.replace(/\n/g, '<br>') : 'Hãy xem lại các bước giải và công thức đã sử dụng'}<br><br>
+                    Bạn hãy thử làm lại và gửi đáp án mới nhé!
                 </div>`;
+                
+                themTinNhanVaoGiaoDien("bot", response);
+                addToChatHistory("bot", response, currentSubject);
+                
+                updateUserProgress(topic, false);
             }
-            
-            response += `</div>`;
-            
-            themTinNhanVaoGiaoDien("bot", response);
-            addToChatHistory("bot", response, currentSubject);
-            currentProblem.solved = true;
-            
-            updateUserProgress(topic, true);
-            
-        } else {
-            let response = `<div class="question-box">
-                <div class="question-box-title"><i class="fas fa-exclamation-circle"></i> Đáp án chưa chính xác</div>
-                <strong>Lỗi sai:</strong><br>
-                ${loiSai.replace(/\n/g, '<br>')}<br><br>
-                <strong>Gợi ý làm lại:</strong><br>
-                ${goiY ? goiY.replace(/\n/g, '<br>') : 'Hãy xem lại các bước giải và công thức đã sử dụng'}<br><br>
-                Bạn hãy thử làm lại và gửi đáp án mới nhé!
+        } catch (error) {
+            console.error("Lỗi khi kiểm tra đáp án:", error);
+            loadingIndicator.style.display = 'none';
+            const response = `<div class="question-box">
+                <div class="question-box-title"><i class="fas fa-times-circle"></i> Lỗi hệ thống</div>
+                Mình chưa thể kiểm tra đáp án ngay bây giờ.<br>
+                Bạn vui lòng:<br>
+                1. Kiểm tra lại cách giải<br>
+                2. Thử lại sau ít phút<br>
+                Xin lỗi bạn vì sự bất tiện này!
             </div>`;
-            
             themTinNhanVaoGiaoDien("bot", response);
             addToChatHistory("bot", response, currentSubject);
-            
-            updateUserProgress(topic, false);
         }
-    } catch (error) {
-        console.error("Lỗi khi kiểm tra đáp án:", error);
-        loadingIndicator.style.display = 'none';
-        const response = `<div class="question-box">
-            <div class="question-box-title"><i class="fas fa-times-circle"></i> Lỗi hệ thống</div>
-            Mình chưa thể kiểm tra đáp án ngay bây giờ.<br>
-            Bạn vui lòng:<br>
-            1. Kiểm tra lại cách giải<br>
-            2. Thử lại sau ít phút<br>
-            Xin lỗi bạn vì sự bất tiện này!
-        </div>`;
-        themTinNhanVaoGiaoDien("bot", response);
-        addToChatHistory("bot", response, currentSubject);
     }
-}
 
-function isAskingForSolution(message) {
-    return solutionRequestPhrases.test(message.toLowerCase());
-}
+    function isAskingForSolution(message) {
+        return solutionRequestPhrases.test(message.toLowerCase());
+    }
 
-function isHomeworkProblem(message) {
-    if (!message) return false;
-    
-    const problemIndicators = [
-        "tính", "xác định", "cho biết", "bài toán", "tìm", 
-        "vận tốc", "khối lượng", "nồng độ", "phản ứng", 
-        "điện tích", "lực", "gia tốc", "nhiệt độ", "áp suất",
-        "bài tập", "giải bài", "làm bài"
-    ];
-    
-    const subjectTerms = {
-        'toan-hoc': ["toán", "phương trình", "hàm số", "đạo hàm", "tích phân", "hình học"],
-        'vat-ly': ["vật lý", "chuyển động", "điện", "từ trường", "quang học", "nhiệt"],
-        'hoa-hoc': ["hóa học", "phản ứng", "chất", "nguyên tử", "phân tử", "mol"]
-    };
-    
-    const hasNumbers = /\d/.test(message);
-    
-    const hasProblemIndicators = problemIndicators.some(indicator => 
-        message.toLowerCase().includes(indicator)
-    );
-    
-    const hasSubjectTerms = currentSubject && subjectTerms[currentSubject] ? 
-        subjectTerms[currentSubject].some(term => message.toLowerCase().includes(term)) : 
-        false;
-    
-    return (hasNumbers && hasProblemIndicators) || 
-           (hasSubjectTerms && hasProblemIndicators) ||
-           solutionRequestPhrases.test(message.toLowerCase());
-}
-
-function processAnalysisResponse(response, originalQuestion) {
-    if (!currentProblem || currentProblem.question !== originalQuestion) {
-        currentProblem = {
-            question: originalQuestion,
-            analysis: response,
-            solved: false,
-            countedAsCompleted: false
+    function isHomeworkProblem(message) {
+        if (!message) return false;
+        
+        const problemIndicators = [
+            "tính", "xác định", "cho biết", "bài toán", "tìm", 
+            "vận tốc", "khối lượng", "nồng độ", "phản ứng", 
+            "điện tích", "lực", "gia tốc", "nhiệt độ", "áp suất",
+            "bài tập", "giải bài", "làm bài"
+        ];
+        
+        const subjectTerms = {
+            'toan-hoc': ["toán", "phương trình", "hàm số", "đạo hàm", "tích phân", "hình học"],
+            'vat-ly': ["vật lý", "chuyển động", "điện", "từ trường", "quang học", "nhiệt"],
+            'hoa-hoc': ["hóa học", "phản ứng", "chất", "nguyên tử", "phân tử", "mol"]
         };
         
-        const topicMatch = response.match(/2\. Chủ đề:\s*(.+)/);
-        const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
-        updateUserProgress(topic);
+        const hasNumbers = /\d/.test(message);
+        
+        const hasProblemIndicators = problemIndicators.some(indicator => 
+            message.toLowerCase().includes(indicator)
+        );
+        
+        const hasSubjectTerms = currentSubject && subjectTerms[currentSubject] ? 
+            subjectTerms[currentSubject].some(term => message.toLowerCase().includes(term)) : 
+            false;
+        
+        return (hasNumbers && hasProblemIndicators) || 
+               (hasSubjectTerms && hasProblemIndicators) ||
+               solutionRequestPhrases.test(message.toLowerCase());
     }
-    
-    let formattedResponse = response.replace(/\*/g, '');
-    
-    let summaryPart = "";
-    const summaryMatch = response.match(/1\. Tóm tắt đề bài:\s*([\s\S]*?)(2\. Chủ đề:|$)/i);
-    if (summaryMatch && summaryMatch[1]) {
-        const summaryContent = summaryMatch[1].trim();
-        if (summaryContent && !summaryContent.includes("Chủ đề")) {
-            summaryPart = `<div class="problem-summary">
-                <div class="summary-title"><i class="fas fa-list-alt"></i> Tóm tắt đề bài</div>
-                ${summaryContent.replace(/\n/g, '<br>')}
-            </div>`;
+
+    function processAnalysisResponse(response, originalQuestion) {
+        const currentState = getCurrentSubjectState();
+        
+        if (!currentState.currentProblem || currentState.currentProblem.question !== originalQuestion) {
+            updateCurrentSubjectState({
+                currentProblem: {
+                    question: originalQuestion,
+                    analysis: response,
+                    solved: false,
+                    countedAsCompleted: false
+                }
+            });
+            
+            const topicMatch = response.match(/2\. Chủ đề:\s*(.+)/);
+            const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
+            updateUserProgress(topic);
+        }
+        
+        let formattedResponse = response.replace(/\*/g, '');
+        
+        let summaryPart = "";
+        const summaryMatch = response.match(/1\. Tóm tắt đề bài:\s*([\s\S]*?)(2\. Chủ đề:|$)/i);
+        if (summaryMatch && summaryMatch[1]) {
+            const summaryContent = summaryMatch[1].trim();
+            if (summaryContent && !summaryContent.includes("Chủ đề")) {
+                summaryPart = `<div class="problem-summary">
+                    <div class="summary-title"><i class="fas fa-list-alt"></i> Tóm tắt đề bài</div>
+                    ${summaryContent.replace(/\n/g, '<br>')}
+                </div>`;
+            }
+        }
+        
+        formattedResponse = formattedResponse
+            .replace(/1\. Tóm tắt đề bài:\s*/g, '')
+            .replace(/2\. Chủ đề:\s*/g, '<strong>2. Chủ đề:</strong> ')
+            .replace(/3\. Kiến thức liên quan:\s*/g, '<strong>3. Kiến thức liên quan:</strong>')
+            .replace(/- Khái niệm:\s*(.+)/g, '<div class="formula">- Khái niệm: $1</div>')
+            .replace(/- Công thức:\s*(.+)/g, '<div class="formula">- Công thức: $1</div>')
+            .replace(/4\. Câu hỏi định hướng:\s*/g, '<strong>4. Câu hỏi định hướng:</strong>')
+            .replace(/5\. Bài tập tương tự:\s*/g, '<strong>5. Bài tập tương tự:</strong>')
+            .replace(/\n/g, '<br>')
+            .replace(/(<br>|\n)\d+\.\s*/g, '$1- ');
+        
+        return `${summaryPart}<div class="knowledge-box">
+            <div class="knowledge-box-title"><i class="fas fa-lightbulb"></i> Phân tích bài toán</div>
+            ${formattedResponse}
+        </div>`;
+    }
+
+    async function processSolutionGuidanceResponse(response, originalQuestion, subject) {
+        const currentState = getCurrentSubjectState();
+        if (currentState.currentProblem) {
+            updateCurrentSubjectState({
+                currentProblem: {
+                    ...currentState.currentProblem,
+                    solved: true
+                }
+            });
+        }
+        
+        const topicMatch = currentState.currentProblem?.analysis.match(/2\. Chủ đề: (.+)/);
+        const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
+        
+        updateUserProgress(topic, true);
+        
+        let formattedResponse = response;
+        
+        formattedResponse = formattedResponse.replace(/\*/g, '');
+        
+        return formattedResponse;
+    }
+
+    async function checkForReviewSuggestion(topic) {
+        if (!currentSubject || !userProgress[currentSubject]?.topics[topic]) return;
+        
+        const topicStats = userProgress[currentSubject].topics[topic];
+        const mistakeRate = topicStats.mistakes / topicStats.total;
+        
+        if (mistakeRate > 0.5) {
+            try {
+                const prompt = generateReviewSuggestionPrompt(topic, currentSubject, topicStats.mistakes);
+                const moHinhSubject = getAIModel(currentSubject);
+                const ketQua = await moHinhSubject.generateContent(prompt);
+                const phanHoi = await ketQua.response;
+                const reviewSuggestion = phanHoi.text().replace(/\*/g, '');
+                
+                const formattedResponse = `<div class="review-suggestion">
+                    <div class="review-suggestion-title"><i class="fas fa-exclamation-triangle"></i> Gợi ý ôn tập</div>
+                    ${reviewSuggestion.replace(/\n/g, '<br>')}
+                </div>`;
+                
+                themTinNhanVaoGiaoDien("bot", formattedResponse);
+                addToChatHistory("bot", formattedResponse, currentSubject);
+                
+                if (!weaknessAreas[currentSubject][topic]) {
+                    weaknessAreas[currentSubject][topic] = [];
+                    saveWeaknessAreas();
+                }
+                
+            } catch (error) {
+                console.error("Lỗi khi tạo gợi ý ôn tập:", error);
+            }
         }
     }
-    
-    formattedResponse = formattedResponse
-        .replace(/1\. Tóm tắt đề bài:\s*/g, '')
-        .replace(/2\. Chủ đề:\s*/g, '<strong>2. Chủ đề:</strong> ')
-        .replace(/3\. Kiến thức liên quan:\s*/g, '<strong>3. Kiến thức liên quan:</strong>')
-        .replace(/- Khái niệm:\s*(.+)/g, '<div class="formula">- Khái niệm: $1</div>')
-        .replace(/- Công thức:\s*(.+)/g, '<div class="formula">- Công thức: $1</div>')
-        .replace(/4\. Câu hỏi định hướng:\s*/g, '<strong>4. Câu hỏi định hướng:</strong>')
-        .replace(/5\. Bài tập tương tự:\s*/g, '<strong>5. Bài tập tương tự:</strong>')
-        .replace(/\n/g, '<br>')
-        .replace(/(<br>|\n)\d+\.\s*/g, '$1- ');
-    
-    return `${summaryPart}<div class="knowledge-box">
-        <div class="knowledge-box-title"><i class="fas fa-lightbulb"></i> Phân tích bài toán</div>
-        ${formattedResponse}
-    </div>`;
-}
 
-async function processSolutionGuidanceResponse(response, originalQuestion, subject) {
-    currentProblem.solved = true;
-    
-    const topicMatch = currentProblem.analysis.match(/2\. Chủ đề: (.+)/);
-    const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Không xác định';
-    
-    updateUserProgress(topic, true);
-    
-    let formattedResponse = response;
-    
-    formattedResponse = formattedResponse.replace(/\*/g, '');
-    
-    return formattedResponse;
-}
+    async function guiTinNhan() {
+        const tinNhanNguoiDung = oNhapTinNhan.value.trim();
+        if (!tinNhanNguoiDung) return;
 
-async function checkForReviewSuggestion(topic) {
-    if (!currentSubject || !userProgress[currentSubject]?.topics[topic]) return;
-    
-    const topicStats = userProgress[currentSubject].topics[topic];
-    const mistakeRate = topicStats.mistakes / topicStats.total;
-    
-    if (mistakeRate > 0.5) {
-        try {
-            const prompt = generateReviewSuggestionPrompt(topic, currentSubject, topicStats.mistakes);
-            const ketQua = await moHinh.generateContent(prompt);
-            const phanHoi = await ketQua.response;
-            const reviewSuggestion = phanHoi.text().replace(/\*/g, '');
-            
-            const formattedResponse = `<div class="review-suggestion">
-                <div class="review-suggestion-title"><i class="fas fa-exclamation-triangle"></i> Gợi ý ôn tập</div>
-                ${reviewSuggestion.replace(/\n/g, '<br>')}
-            </div>`;
-            
-            themTinNhanVaoGiaoDien("bot", formattedResponse);
-            addToChatHistory("bot", formattedResponse, currentSubject);
-            
-            if (!weaknessAreas[currentSubject][topic]) {
-                weaknessAreas[currentSubject][topic] = [];
-                saveWeaknessAreas();
+        themTinNhanVaoGiaoDien("nguoi-dung", tinNhanNguoiDung);
+        addToChatHistory("nguoi-dung", tinNhanNguoiDung, currentSubject);
+        oNhapTinNhan.value = '';
+        adjustTextareaHeight();
+
+        if (tinNhanNguoiDung.toLowerCase().includes("bài kiểm tra")) {
+            const baiKiemTra = await generateTest(currentSubject, tinNhanNguoiDung);
+            if (baiKiemTra) {
+                updateCurrentSubjectState({
+                    currentTest: baiKiemTra,
+                    isWaitingForTestAnswers: true
+                });
+                
+                const formattedTest = `<div class="test-container" style="border: 2px solid #3a7bd5; border-radius: 10px; padding: 15px; margin-bottom: 20px; background-color: #f8f9fa;">
+                    <div style="text-align: center; font-weight: bold; font-size: 1.2rem; color: #3a7bd5; margin-bottom: 15px;">
+                        BÀI KIỂM TRA ${currentSubject === 'toan-hoc' ? 'TOÁN HỌC' : currentSubject === 'vat-ly' ? 'VẬT LÝ' : 'HÓA HỌC'} - 10 CÂU TỰ LUẬN
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        ${baiKiemTra.replace(/\n/g, '<br>').replace(/\[.*?\]/g, '')}
+                    </div>
+                    <div style="font-style: italic; color: #666;">
+                        Gửi câu trả lời theo định dạng: 1. [đáp án 1], 2. [đáp án 2], ..., 10. [đáp án 10]
+                    </div>
+                </div>`;
+                
+                themTinNhanVaoGiaoDien("bot", formattedTest);
+                addToChatHistory("bot", formattedTest, currentSubject);
+            } else {
+                const errorMsg = "Xin lỗi, mình chưa thể tạo bài kiểm tra ngay lúc này. Vui lòng thử lại sau!";
+                themTinNhanVaoGiaoDien("bot", errorMsg);
+                addToChatHistory("bot", errorMsg, currentSubject);
             }
             
-        } catch (error) {
-            console.error("Lỗi khi tạo gợi ý ôn tập:", error);
+            loadingIndicator.style.display = 'none';
+            return;
         }
-    }
-}
 
-async function guiTinNhan() {
-    const tinNhanNguoiDung = oNhapTinNhan.value.trim();
-    if (!tinNhanNguoiDung) return;
-
-themTinNhanVaoGiaoDien("nguoi-dung", tinNhanNguoiDung);
-addToChatHistory("nguoi-dung", tinNhanNguoiDung, currentSubject);
-oNhapTinNhan.value = '';
-adjustTextareaHeight();
-    if (tinNhanNguoiDung.toLowerCase().includes("bài kiểm tra")) {
-        const baiKiemTra = await generateTest(currentSubject, tinNhanNguoiDung);
-        if (baiKiemTra) {
-            currentTest = baiKiemTra;
-            isWaitingForTestAnswers = true;
+        const currentState = getCurrentSubjectState();
+        if (currentState.isWaitingForTestAnswers && currentState.currentTest) {
+            const ketQuaChamBai = await gradeTest(currentState.currentTest, tinNhanNguoiDung);
             
-            const formattedTest = `<div class="test-container" style="border: 2px solid #3a7bd5; border-radius: 10px; padding: 15px; margin-bottom: 20px; background-color: #f8f9fa;">
-                <div style="text-align: center; font-weight: bold; font-size: 1.2rem; color: #3a7bd5; margin-bottom: 15px;">
-                    BÀI KIỂM TRA ${currentSubject === 'toan-hoc' ? 'TOÁN HỌC' : currentSubject === 'vat-ly' ? 'VẬT LÝ' : 'HÓA HỌC'} - 10 CÂU TỰ LUẬN
-                </div>
-                <div style="margin-bottom: 15px;">
-                    ${baiKiemTra.replace(/\n/g, '<br>').replace(/\[.*?\]/g, '')}
-                </div>
-                <div style="font-style: italic; color: #666;">
-                    Gửi câu trả lời theo định dạng: 1. [đáp án 1], 2. [đáp án 2], ..., 10. [đáp án 10]
-                </div>
-            </div>`;
-            
-            themTinNhanVaoGiaoDien("bot", formattedTest);
-            addToChatHistory("bot", formattedTest, currentSubject);
-        } else {
-            const errorMsg = "Xin lỗi, mình chưa thể tạo bài kiểm tra ngay lúc này. Vui lòng thử lại sau!";
-            themTinNhanVaoGiaoDien("bot", errorMsg);
-            addToChatHistory("bot", errorMsg, currentSubject);
-        }
-        
-        loadingIndicator.style.display = 'none';
-        return;
-    }
-
-    if (isWaitingForTestAnswers && currentTest) {
-        const ketQuaChamBai = await gradeTest(currentTest, tinNhanNguoiDung);
-        
-        if (ketQuaChamBai) {
-            const formattedResult = `
-                <div class="test-result">
-                    <div class="test-header">KẾT QUẢ CHẤM BÀI</div>
-                    <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 8px;">
-                        ${ketQuaChamBai.replace(/\n/g, '<br>')}
+            if (ketQuaChamBai) {
+                const formattedResult = `
+                    <div class="test-result">
+                        <div class="test-header">KẾT QUẢ CHẤM BÀI</div>
+                        <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 8px;">
+                            ${ketQuaChamBai.replace(/\n/g, '<br>')}
+                        </div>
                     </div>
-                </div>
-            `;
-            
-            themTinNhanVaoGiaoDien("bot", formattedResult);
-            addToChatHistory("bot", formattedResult, currentSubject);
-            
-            currentTest = null;
-            isWaitingForTestAnswers = false;
-        } else {
-            const errorMsg = "Xin lỗi, mình chưa thể chấm bài...";
-            themTinNhanVaoGiaoDien("bot", errorMsg);
-            addToChatHistory("bot", errorMsg, currentSubject);
-        }
-        
-        loadingIndicator.style.display = 'none';
-        return;
-    }
-
-    oNhapTinNhan.value = '';
-    adjustTextareaHeight();
-
-    loadingIndicator.style.display = 'block';
-    khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
-
-    try {
-        const loiChao = ["chào", "hello", "xin chào"];
-        if (loiChao.some(chao => tinNhanNguoiDung.toLowerCase().includes(chao))) {
-            setTimeout(() => {
-                loadingIndicator.style.display = 'none';
-                const subjectName = 
-                    currentSubject === 'toan-hoc' ? 'Toán Học' : 
-                    currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+                `;
                 
-                const response = `TriGuide chào bạn!!! Mình có thể giúp gì cho bạn về môn ${subjectName} không?`;
-                themTinNhanVaoGiaoDien("bot", response);
-                addToChatHistory("bot", response, currentSubject);
-            }, 1000);
-            return;
-        }
-
-        if (currentProblem && !currentProblem.solved && isPotentialAnswer(tinNhanNguoiDung)) {
-            await checkStudentAnswer(tinNhanNguoiDung);
-            return;
-        }
-
-        const isAskingForHomework = homeworkRequestPhrases.test(tinNhanNguoiDung.toLowerCase());
-        if (isAskingForHomework) {
-            setTimeout(() => {
-                loadingIndicator.style.display = 'none';
-                const subjectName = 
-                    currentSubject === 'toan-hoc' ? 'Toán Học' : 
-                    currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+                themTinNhanVaoGiaoDien("bot", formattedResult);
+                addToChatHistory("bot", formattedResult, currentSubject);
                 
-                const response = `Bạn muốn bài tập về chủ đề nào trong môn ${subjectName}?`;
-                themTinNhanVaoGiaoDien("bot", response);
-                addToChatHistory("bot", response, currentSubject);
-            }, 1500);
-            return;
-        }
-
-        if (tinNhanNguoiDung && !laCauHoiTHPT(tinNhanNguoiDung)) {
-            setTimeout(() => {
-                loadingIndicator.style.display = 'none';
-                const response = "Xin lỗi bạn, mình chỉ có thể giúp với các câu hỏi và bài tập ở cấp độ THPT.";
-                themTinNhanVaoGiaoDien("bot", response);
-                addToChatHistory("bot", response, currentSubject);
-            }, 1000);
-            return;
-        }
-
-        const recentHistory = chatHistory.filter(msg => msg.subject === currentSubject).slice(-3);
-        
-        const isAskingForSolution = solutionRequestPhrases.test(tinNhanNguoiDung.toLowerCase());
-        
-        if (currentProblem && !currentProblem.solved && isAskingForSolution) {
-            const prompt = generateSolutionGuidancePrompt(tinNhanNguoiDung, currentSubject, recentHistory, currentProblem.analysis);
+                updateCurrentSubjectState({
+                    currentTest: null,
+                    isWaitingForTestAnswers: false
+                });
+            } else {
+                const errorMsg = "Xin lỗi, mình chưa thể chấm bài...";
+                themTinNhanVaoGiaoDien("bot", errorMsg);
+                addToChatHistory("bot", errorMsg, currentSubject);
+            }
             
-            const ketQua = await moHinh.generateContent(prompt);
+            loadingIndicator.style.display = 'none';
+            return;
+        }
+
+        oNhapTinNhan.value = '';
+        adjustTextareaHeight();
+
+        loadingIndicator.style.display = 'block';
+        khungTroChuyen.scrollTop = khungTroChuyen.scrollHeight;
+
+        try {
+            const loiChao = ["chào", "hello", "xin chào"];
+            if (loiChao.some(chao => tinNhanNguoiDung.toLowerCase().includes(chao))) {
+                setTimeout(() => {
+                    loadingIndicator.style.display = 'none';
+                    const subjectName = 
+                        currentSubject === 'toan-hoc' ? 'Toán Học' : 
+                        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+                    
+                    const response = `TriGuide chào bạn!!! Mình có thể giúp gì cho bạn về môn ${subjectName} không?`;
+                    themTinNhanVaoGiaoDien("bot", response);
+                    addToChatHistory("bot", response, currentSubject);
+                }, 1000);
+                return;
+            }
+
+            const currentState = getCurrentSubjectState();
+            if (currentState.currentProblem && !currentState.currentProblem.solved && isPotentialAnswer(tinNhanNguoiDung)) {
+                await checkStudentAnswer(tinNhanNguoiDung);
+                return;
+            }
+
+            const isAskingForHomework = homeworkRequestPhrases.test(tinNhanNguoiDung.toLowerCase());
+            if (isAskingForHomework) {
+                setTimeout(() => {
+                    loadingIndicator.style.display = 'none';
+                    const subjectName = 
+                        currentSubject === 'toan-hoc' ? 'Toán Học' : 
+                        currentSubject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+                    
+                    const response = `Bạn muốn bài tập về chủ đề nào trong môn ${subjectName}?`;
+                    themTinNhanVaoGiaoDien("bot", response);
+                    addToChatHistory("bot", response, currentSubject);
+                }, 1500);
+                return;
+            }
+
+            if (tinNhanNguoiDung && !laCauHoiTHPT(tinNhanNguoiDung)) {
+                setTimeout(() => {
+                    loadingIndicator.style.display = 'none';
+                    const response = "Xin lỗi bạn, mình chỉ có thể giúp với các câu hỏi và bài tập ở cấp độ THPT.";
+                    themTinNhanVaoGiaoDien("bot", response);
+                    addToChatHistory("bot", response, currentSubject);
+                }, 1000);
+                return;
+            }
+
+            const recentHistory = chatHistory.filter(msg => msg.subject === currentSubject).slice(-3);
+            
+            const isAskingForSolution = solutionRequestPhrases.test(tinNhanNguoiDung.toLowerCase());
+            const currentProblem = currentState.currentProblem;
+            
+            if (currentProblem && !currentProblem.solved && isAskingForSolution) {
+                const prompt = generateSolutionGuidancePrompt(tinNhanNguoiDung, currentSubject, recentHistory, currentProblem.analysis);
+                
+                const moHinhSubject = getAIModel(currentSubject);
+                const ketQua = await moHinhSubject.generateContent(prompt);
+                const phanHoi = await ketQua.response;
+                let traLoiBot = phanHoi.text();
+                
+                traLoiBot = await processSolutionGuidanceResponse(traLoiBot, tinNhanNguoiDung, currentSubject);
+                
+                loadingIndicator.style.display = 'none';
+                themTinNhanVaoGiaoDien("bot", traLoiBot);
+                addToChatHistory("bot", traLoiBot, currentSubject);
+                
+                const topicMatch = currentProblem.analysis.match(/2\. Chủ đề: (.+)/);
+                if (topicMatch && topicMatch[1]) {
+                    const topic = topicMatch[1].trim();
+                    checkForReviewSuggestion(topic);
+                }
+                
+                return;
+            }
+            
+            const isHomeworkProblemValue = isHomeworkProblem(tinNhanNguoiDung) && !currentProblem;
+            let prompt;
+            
+            if (isHomeworkProblemValue) {
+                if (!currentProblem || currentProblem.question !== tinNhanNguoiDung) {
+                    prompt = generateAnalysisPrompt(tinNhanNguoiDung, currentSubject, recentHistory);
+                } else {
+                    prompt = generateSolutionGuidancePrompt(tinNhanNguoiDung, currentSubject, recentHistory, currentProblem.analysis);
+                }
+            } else {
+                prompt = generateGeneralPrompt(tinNhanNguoiDung, currentSubject, recentHistory);
+            }
+            
+            const moHinhSubject = getAIModel(currentSubject);
+            const ketQua = await moHinhSubject.generateContent(prompt);
             const phanHoi = await ketQua.response;
             let traLoiBot = phanHoi.text();
             
-            traLoiBot = await processSolutionGuidanceResponse(traLoiBot, tinNhanNguoiDung, currentSubject);
+            traLoiBot = traLoiBot.replace(/\*/g, '');
+            
+            if (isHomeworkProblemValue) {
+                traLoiBot = processAnalysisResponse(traLoiBot, tinNhanNguoiDung);
+                
+                if (!traLoiBot.includes("knowledge-box")) {
+                    updateCurrentSubjectState({ currentProblem: null });
+                }
+            }
             
             loadingIndicator.style.display = 'none';
             themTinNhanVaoGiaoDien("bot", traLoiBot);
             addToChatHistory("bot", traLoiBot, currentSubject);
             
-            const topicMatch = currentProblem.analysis.match(/2\. Chủ đề: (.+)/);
-            if (topicMatch && topicMatch[1]) {
-                const topic = topicMatch[1].trim();
-                checkForReviewSuggestion(topic);
-            }
-            
-            
-            return;
-        }
-        
-        const isHomeworkProblemValue = isHomeworkProblem(tinNhanNguoiDung) && !currentProblem;
-        let prompt;
-        
-        if (isHomeworkProblemValue) {
-            if (!currentProblem || currentProblem.question !== tinNhanNguoiDung) {
-                prompt = generateAnalysisPrompt(tinNhanNguoiDung, currentSubject, recentHistory);
-            } else {
-                prompt = generateSolutionGuidancePrompt(tinNhanNguoiDung, currentSubject, recentHistory, currentProblem.analysis);
-            }
-        } else {
-            prompt = generateGeneralPrompt(tinNhanNguoiDung, currentSubject, recentHistory);
-        }
-        
-        const ketQua = await moHinh.generateContent(prompt);
-        const phanHoi = await ketQua.response;
-        let traLoiBot = phanHoi.text();
-        
-        traLoiBot = traLoiBot.replace(/\*/g, '');
-        
-        if (isHomeworkProblemValue) {
-            traLoiBot = processAnalysisResponse(traLoiBot, tinNhanNguoiDung);
-            
-            if (!traLoiBot.includes("knowledge-box")) {
-                currentProblem = null;
-            }
-        }
-        
-        loadingIndicator.style.display = 'none';
-        themTinNhanVaoGiaoDien("bot", traLoiBot);
-        addToChatHistory("bot", traLoiBot, currentSubject);
-        
 
-    } catch (loi) {
-        console.error("Lỗi khi xử lý câu hỏi: ", loi);
-        loadingIndicator.style.display = 'none';
-        const response = `<div class="question-box">
-            <div class="question-box-title"><i class="fas fa-times-circle"></i> Lỗi hệ thống</div>
-            Mình chưa thể xử lý yêu cầu ngay bây giờ.<br>
-            Bạn vui lòng:<br>
-            1. Kiểm tra lại câu hỏi<br>
-            2. Thử lại sau ít phút<br>
-            Xin lỗi bạn vì sự bất tiện này!
-        </div>`;
-        themTinNhanVaoGiaoDien("bot", response);
-        addToChatHistory("bot", response, currentSubject);
+        } catch (loi) {
+            console.error("Lỗi khi xử lý câu hỏi: ", loi);
+            loadingIndicator.style.display = 'none';
+            const response = `<div class="question-box">
+                <div class="question-box-title"><i class="fas fa-times-circle"></i> Lỗi hệ thống</div>
+                Mình chưa thể xử lý yêu cầu ngay bây giờ.<br>
+                Bạn vui lòng:<br>
+                1. Kiểm tra lại câu hỏi<br>
+                2. Thử lại sau ít phút<br>
+                Xin lỗi bạn vì sự bất tiện này!
+            </div>`;
+            themTinNhanVaoGiaoDien("bot", response);
+            addToChatHistory("bot", response, currentSubject);
+        }
     }
-}
 
-function isPotentialAnswer(message) {
-    if (!message) return false;
-    
-    const containsNumber = /\d/.test(message);
-    
-    const isShort = message.split(/\s+/).length <= 5;
-    
-    const isNotQuestion = !/(\?|hỏi|giải|giúp|tại sao|như thế nào)/i.test(message);
-    
-    return (containsNumber && isShort && isNotQuestion) || 
-           /(đáp án|kết quả|là|bằng)/i.test(message);
-}
+    function isPotentialAnswer(message) {
+        if (!message) return false;
+        
+        const containsNumber = /\d/.test(message);
+        
+        const isShort = message.split(/\s+/).length <= 5;
+        
+        const isNotQuestion = !/(\?|hỏi|giải|giúp|tại sao|như thế nào)/i.test(message);
+        
+        return (containsNumber && isShort && isNotQuestion) || 
+               /(đáp án|kết quả|là|bằng)/i.test(message);
+    }
 
-function laCauHoiTHPT(cauHoi) {
-    if (!cauHoi) return true;
-    
-    const cauHoiThuong = cauHoi.toLowerCase();
-    return !generalExcludeKeywords.some(tuKhoa => cauHoiThuong.includes(tuKhoa));
-}
+    function laCauHoiTHPT(cauHoi) {
+        if (!cauHoi) return true;
+        
+        const cauHoiThuong = cauHoi.toLowerCase();
+        return !generalExcludeKeywords.some(tuKhoa => cauHoiThuong.includes(tuKhoa));
+    }
 
-function selectSubject(subject) {
-    currentSubject = subject;
-    subjectScreen.style.display = 'none';
-    chatbotContainer.style.display = 'flex';
-    
-    loadSubjectChatHistory(subject);
-}
+    function selectSubject(subject) {
+        currentSubject = subject;
+        subjectScreen.style.display = 'none';
+        chatbotContainer.style.display = 'flex';
+        
+        // Reset state khi chuyển môn
+        resetSubjectState();
+        loadSubjectChatHistory(subject);
+    }
 
-document.addEventListener('DOMContentLoaded', initApp);
+    document.addEventListener('DOMContentLoaded', initApp);
 
-async function generateTest(subject, userMessage) {
-    try {
-        loadingIndicator.style.display = 'block';
-        
-        const subjectName = subject === 'toan-hoc' ? 'Toán Học' : 
-                          subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
-        
-        let topic = "nhiều chủ đề";
-        let difficulty = "trung bình";
-        
-        const topicMatch = userMessage.match(/chủ đề (.+?)( mức|$)/i);
-        if (topicMatch) topic = topicMatch[1];
-        
-        const diffMatch = userMessage.match(/mức độ (dễ|trung bình|khó)/i);
-        if (diffMatch) difficulty = diffMatch[1].toLowerCase();
-        
-        const prompt = `Bạn là giáo viên ${subjectName} THPT. Hãy tạo bài kiểm tra 10 câu tự luận với:
+    async function generateTest(subject, userMessage) {
+        try {
+            loadingIndicator.style.display = 'block';
+            
+            const subjectName = subject === 'toan-hoc' ? 'Toán Học' : 
+                              subject === 'vat-ly' ? 'Vật Lý' : 'Hóa Học';
+            
+            let topic = "nhiều chủ đề";
+            let difficulty = "trung bình";
+            
+            const topicMatch = userMessage.match(/chủ đề (.+?)( mức|$)/i);
+            if (topicMatch) topic = topicMatch[1];
+            
+            const diffMatch = userMessage.match(/mức độ (dễ|trung bình|khó)/i);
+            if (diffMatch) difficulty = diffMatch[1].toLowerCase();
+            
+            const prompt = `Bạn là giáo viên ${subjectName} THPT. Hãy tạo bài kiểm tra 10 câu tự luận với:
 - Chủ đề: ${topic}
 - Mức độ: ${difficulty}
 - Mỗi câu có số thứ tự rõ ràng (1. ..., 2. ..., ...)
@@ -2474,85 +2561,86 @@ async function generateTest(subject, userMessage) {
 
 [KẾT THÚC]`;
 
-        const ketQua = await moHinh.generateContent(prompt);
-        const phanHoi = await ketQua.response;
-        let baiKiemTra = phanHoi.text().trim();
-        
-        if (!baiKiemTra.includes("[BÀI KIỂM TRA")) {
-            baiKiemTra = `[BÀI KIỂM TRA ${subjectName.toUpperCase()} - ${topic.toUpperCase()}]\n${baiKiemTra}\n[KẾT THÚC]`;
+            const moHinhSubject = getAIModel(subject);
+            const ketQua = await moHinhSubject.generateContent(prompt);
+            const phanHoi = await ketQua.response;
+            let baiKiemTra = phanHoi.text().trim();
+            
+            if (!baiKiemTra.includes("[BÀI KIỂM TRA")) {
+                baiKiemTra = `[BÀI KIỂM TRA ${subjectName.toUpperCase()} - ${topic.toUpperCase()}]\n${baiKiemTra}\n[KẾT THÚC]`;
+            }
+            
+            baiKiemTra = baiKiemTra.replace(/[\*\$]/g, '');
+            
+            loadingIndicator.style.display = 'none';
+            return baiKiemTra;
+        } catch (error) {
+            console.error("Lỗi khi tạo bài kiểm tra:", error);
+            loadingIndicator.style.display = 'none';
+            return null;
         }
-        
-        baiKiemTra = baiKiemTra.replace(/[\*\$]/g, '');
-        
-        loadingIndicator.style.display = 'none';
-        return baiKiemTra;
-    } catch (error) {
-        console.error("Lỗi khi tạo bài kiểm tra:", error);
-        loadingIndicator.style.display = 'none';
-        return null;
     }
-}
 
-function saveTestResult(testQuestions, studentAnswers, result) {
-    if (!currentSubject) return;
-    
-    if (result.includes("Xin lỗi, có lỗi khi chấm bài")) {
-        console.warn("Không lưu kết quả vì chấm bài bị lỗi:", result);
-        return;
-    }
-    
-    let score = 0;
-    const scoreMatch = result.match(/Tổng điểm:\s*(\d+\.?\d*)\s*(?:\/|out of)\s*10/i);
-    if (scoreMatch && scoreMatch[1]) {
-        score = parseFloat(scoreMatch[1]);
-    } else {
-        const numberMatch = result.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:\/|out of)\s*10\b/i);
-        if (numberMatch && numberMatch[1]) {
-            score = parseFloat(numberMatch[1]);
-        } else {
-            console.warn("Không thể trích xuất điểm từ kết quả:", result);
+    function saveTestResult(testQuestions, studentAnswers, result) {
+        if (!currentSubject) return;
+        
+        if (result.includes("Xin lỗi, có lỗi khi chấm bài")) {
+            console.warn("Không lưu kết quả vì chấm bài bị lỗi:", result);
             return;
         }
-    }
-    
-    score = Math.min(Math.max(score, 0), 10);
-    
-    const topicMatch = testQuestions.match(/BÀI KIỂM TRA .+? - (.+?)\]/i);
-    const topic = topicMatch ? topicMatch[1] : "Không xác định";
-    
-    if (!testHistory[currentSubject]) {
-        testHistory[currentSubject] = [];
-    }
-    
-    testHistory[currentSubject].push({
-        date: new Date().toISOString(),
-        topic: topic,
-        score: score,
-        questions: testQuestions,
-        answers: studentAnswers,
-        result: result,
-        comment: result.includes("Nhận xét:") ? 
-                 result.split("Nhận xét:")[1].trim() : 
-                 "Không có nhận xét"
-    });
-    
-    if (testHistory[currentSubject].length > 10) {
-        testHistory[currentSubject] = testHistory[currentSubject].slice(-10);
-    }
-    
-    saveTestHistory();
-}
-
-async function gradeTest(testQuestions, studentAnswers) {
-    try {
-        loadingIndicator.style.display = 'block';
         
-        if (!testQuestions || !studentAnswers) {
-            throw new Error("Thiếu dữ liệu bài kiểm tra hoặc câu trả lời");
+        let score = 0;
+        const scoreMatch = result.match(/Tổng điểm:\s*(\d+\.?\d*)\s*(?:\/|out of)\s*10/i);
+        if (scoreMatch && scoreMatch[1]) {
+            score = parseFloat(scoreMatch[1]);
+        } else {
+            const numberMatch = result.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:\/|out of)\s*10\b/i);
+            if (numberMatch && numberMatch[1]) {
+                score = parseFloat(numberMatch[1]);
+            } else {
+                console.warn("Không thể trích xuất điểm từ kết quả:", result);
+                return;
+            }
         }
-
-        const prompt = `Bạn là giáo viên THPT. Hãy chấm bài kiểm tra theo yêu cầu sau:
         
+        score = Math.min(Math.max(score, 0), 10);
+        
+        const topicMatch = testQuestions.match(/BÀI KIỂM TRA .+? - (.+?)\]/i);
+        const topic = topicMatch ? topicMatch[1] : "Không xác định";
+        
+        if (!testHistory[currentSubject]) {
+            testHistory[currentSubject] = [];
+        }
+        
+        testHistory[currentSubject].push({
+            date: new Date().toISOString(),
+            topic: topic,
+            score: score,
+            questions: testQuestions,
+            answers: studentAnswers,
+            result: result,
+            comment: result.includes("Nhận xét:") ? 
+                     result.split("Nhận xét:")[1].trim() : 
+                     "Không có nhận xét"
+        });
+        
+        if (testHistory[currentSubject].length > 10) {
+            testHistory[currentSubject] = testHistory[currentSubject].slice(-10);
+        }
+        
+        saveTestHistory();
+    }
+
+    async function gradeTest(testQuestions, studentAnswers) {
+        try {
+            loadingIndicator.style.display = 'block';
+            
+            if (!testQuestions || !studentAnswers) {
+                throw new Error("Thiếu dữ liệu bài kiểm tra hoặc câu trả lời");
+            }
+
+            const prompt = `Bạn là giáo viên THPT. Hãy chấm bài kiểm tra theo yêu cầu sau:
+            
 YÊU CẦU:
 1. Đánh giá từng câu theo mẫu:
    Câu 1: [Đúng/Sai]
@@ -2571,28 +2659,29 @@ ${studentAnswers}
 Kết quả chấm bài:
 `;
 
-        const ketQua = await moHinh.generateContent(prompt);
-        const phanHoi = await ketQua.response;
-        let ketQuaChamBai = phanHoi.text();
-        
-        ketQuaChamBai = ketQuaChamBai.replace(/[\*\$]/g, '');
-        
-        if (!ketQuaChamBai.includes("Câu 1") || !ketQuaChamBai.includes("Tổng điểm")) {
-            throw new Error("Kết quả chấm bài không đúng định dạng");
+            const moHinhSubject = getAIModel(currentSubject);
+            const ketQua = await moHinhSubject.generateContent(prompt);
+            const phanHoi = await ketQua.response;
+            let ketQuaChamBai = phanHoi.text();
+            
+            ketQuaChamBai = ketQuaChamBai.replace(/[\*\$]/g, '');
+            
+            if (!ketQuaChamBai.includes("Câu 1") || !ketQuaChamBai.includes("Tổng điểm")) {
+                throw new Error("Kết quả chấm bài không đúng định dạng");
+            }
+            
+            saveTestResult(testQuestions, studentAnswers, ketQuaChamBai);
+            
+            loadingIndicator.style.display = 'none';
+            return ketQuaChamBai;
+            
+        } catch (error) {
+            console.error("Lỗi khi chấm bài:", error);
+            loadingIndicator.style.display = 'none';
+            
+            return `Xin lỗi, có lỗi khi chấm bài:\n${error.message}\nVui lòng kiểm tra lại câu trả lời và thử lại.`;
         }
-        
-        saveTestResult(testQuestions, studentAnswers, ketQuaChamBai);
-        
-        loadingIndicator.style.display = 'none';
-        return ketQuaChamBai;
-        
-    } catch (error) {
-        console.error("Lỗi khi chấm bài:", error);
-        loadingIndicator.style.display = 'none';
-        
-        return `Xin lỗi, có lỗi khi chấm bài:\n${error.message}\nVui lòng kiểm tra lại câu trả lời và thử lại.`;
     }
-}
 </script>
 </body>
 </html>
